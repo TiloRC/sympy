@@ -32,7 +32,7 @@ class TheorySolver():
     - Should produce models when M is T-satisfiable
     - **Should produce T-conflicts of minimal size when M is T-unsatisfiable**
     - **Should be designed to work incrementally**
-    - M is constantly being appended to/backtracked upon
+        - M is constantly being appended to/backtracked upon
     - Can be designed to check T-satisfiability either:
         + Eagerly: Check if M is T-satisfiable immediately when any literal is
          added to M
