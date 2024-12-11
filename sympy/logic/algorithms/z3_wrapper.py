@@ -56,9 +56,8 @@ def encoded_cnf_to_z3_solver(enc_cnf, z3):
 
     s = z3.Solver()
 
-    declarations = [f"(declare-const d{var} Bool)" for var in enc_cnf.variables]
-    assertions = [clause_to_assertion(clause) for clause in enc_cnf.data]
 
+    assertions = []
     symbols = set()
     for pred, enc in enc_cnf.encoding.items():
         if not isinstance(pred, AppliedPredicate):
@@ -74,13 +73,15 @@ def encoded_cnf_to_z3_solver(enc_cnf, z3):
         assertion = "(assert " + clause + ")"
         assertions.append(assertion)
 
-    for sym in symbols:
-        declarations.append(f"(declare-const {sym} Real)")
+    smtlib_statements = []
+    smtlib_statements.extend(f"(declare-const d{var} Bool)" for var in enc_cnf.variables)
+    smtlib_statements.extend(f"(declare-const {sym} Real)" for sym in symbols)
+    smtlib_statements.extend(clause_to_assertion(clause) for clause in enc_cnf.data)
+    smtlib_statements.extend(assertions)
 
-    declarations = "\n".join(declarations)
-    assertions = "\n".join(assertions)
-    s.from_string(declarations)
-    s.from_string(assertions)
+    # smtlib_statements = z3.parse_smt2_string("\n".join(smtlib_statements))
+    # s.add(smtlib_statements)
+    s.from_string("\n".join(smtlib_statements))
 
     return s
 
