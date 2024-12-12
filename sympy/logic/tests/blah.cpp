@@ -4,6 +4,8 @@
 #include <sstream>
 #include <string>
 #include <vector>
+#include <gperftools/profiler.h>
+
 
 // Function to split the file content into SMT-LIB strings
 std::vector<std::string> split_smtlib_strings(const std::string& content) {
@@ -36,6 +38,9 @@ int main() {
     // Split the file content into individual SMT-LIB strings
     std::vector<std::string> smtlib_strings = split_smtlib_strings(file_content);
 
+
+     ProfilerStart("profile.prof");
+
     // Initialize a Z3 context
     Z3_config cfg = Z3_mk_config();
     Z3_context ctx = Z3_mk_context(cfg);
@@ -65,6 +70,8 @@ int main() {
     }
 
     Z3_del_context(ctx);
+
+     ProfilerStop();
 
     return 0;
 }

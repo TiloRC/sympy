@@ -346,6 +346,8 @@ def test_z3_vs_lra_dpll2():
     if z3 is None:
         skip("z3 not installed.")
 
+    from pyinstrument import Profiler
+
     def boolean_formula_to_encoded_cnf(bf):
         cnf = CNF.from_prop(bf)
         enc = EncodedCNF()
@@ -368,6 +370,10 @@ def test_z3_vs_lra_dpll2():
 
     lra_dpll2_satisfiable = lambda x: dpll2_satisfiable(x, use_lra_theory=True)
 
+    from pyinstrument import Profiler
+
+    profiler = Profiler()
+    profiler.start()
     for _ in range(50):
         cnf = make_random_cnf(num_clauses=10, num_constraints=15, num_var=2)
 
@@ -379,3 +385,5 @@ def test_z3_vs_lra_dpll2():
         lra_dpll2_sat = lra_dpll2_satisfiable(cnf) is not False
 
         assert z3_sat == lra_dpll2_sat
+    profiler.stop()  # Stop profiling
+    profiler.open_in_browser()
