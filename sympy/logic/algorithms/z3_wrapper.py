@@ -44,7 +44,7 @@ def clause_to_assertion(clause):
     return "(assert (or " + " ".join(clause_strings) + "))"
 
 
-def encoded_cnf_to_z3_solver(enc_cnf, z3):
+def encoded_cnf_to_z3_solver(enc_cnf, z3, parse_smt2=False):
     def dummify_bool(pred):
         return False
         assert isinstance(pred, AppliedPredicate)
@@ -79,9 +79,11 @@ def encoded_cnf_to_z3_solver(enc_cnf, z3):
     smtlib_statements.extend(clause_to_assertion(clause) for clause in enc_cnf.data)
     smtlib_statements.extend(assertions)
 
-    # smtlib_statements = z3.parse_smt2_string("\n".join(smtlib_statements))
-    # s.add(smtlib_statements)
-    s.from_string("\n".join(smtlib_statements))
+    if parse_smt2:
+        smtlib_statements = z3.parse_smt2_string("\n".join(smtlib_statements))
+        s.add(smtlib_statements)
+    else:
+        s.from_string("\n".join(smtlib_statements))
 
     return s
 

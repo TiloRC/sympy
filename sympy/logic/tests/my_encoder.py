@@ -201,8 +201,13 @@ expressions = [
     (x > 10) & (y > 15) & (z < 20),
 ]
 
-
+expressions2 = expressions
 expressions = [expressions[2*i] & expressions[2*i+1] for i in range(len(expressions)//2)]
+from functools import reduce
+
+
+
+oneBigExpression = reduce(lambda a, b: a & b if a & b != False else a, [expr for expr in expressions if (expr != False) and (expr != True) ])
 
 
 def format_expr(expr):
@@ -212,7 +217,11 @@ def format_expr(expr):
         expr = exprs
     return expr
 
+print(len(str(expressions)))
+print(len(str(oneBigExpression)))
 expressions = [format_expr(expr) for expr in expressions]
+
+oneBigExpression = format_expr(oneBigExpression)
 
 
 z3 = import_module("z3")
