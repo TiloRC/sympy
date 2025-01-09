@@ -403,9 +403,9 @@ def test_symbol_imaginary():
 def test_symbol_zero():
     x = Symbol('x', zero=True)
     assert x.is_positive is False
-    assert x.is_nonpositive
+    assert x.is_nonpositive is True
     assert x.is_negative is False
-    assert x.is_nonnegative
+    assert x.is_nonnegative is True
     assert x.is_zero is True
     # TODO Change to x.is_nonzero is None
     # See https://github.com/sympy/sympy/pull/9583
@@ -796,14 +796,14 @@ def test_Add_is_pos_neg():
 
     assert (x - S.Infinity).is_extended_negative is None  # issue 7798
     # issue 8046, 16.2
-    assert (p + nn).is_extended_positive
-    assert (n + np).is_extended_negative
+    assert (p + nn).is_extended_positive is True
+    assert (n + np).is_extended_negative is True
     assert (p + r).is_extended_positive is None
 
 
 def test_Add_is_imaginary():
     nn = Dummy(nonnegative=True)
-    assert (I*nn + I).is_imaginary  # issue 8046, 17
+    assert (I*nn + I).is_imaginary is True  # issue 8046, 17
 
 
 def test_Add_is_algebraic():
@@ -812,7 +812,7 @@ def test_Add_is_algebraic():
     na = Symbol('na', algebraic=False)
     nb = Symbol('nb', algebraic=False)
     x = Symbol('x')
-    assert (a + b).is_algebraic
+    assert (a + b).is_algebraic is True
     assert (na + nb).is_algebraic is None
     assert (a + na).is_algebraic is False
     assert (a + x).is_algebraic is None
@@ -837,8 +837,8 @@ def test_Mul_is_algebraic():
 def test_Pow_is_algebraic():
     e = Symbol('e', algebraic=True)
 
-    assert Pow(1, e, evaluate=False).is_algebraic
-    assert Pow(0, e, evaluate=False).is_algebraic
+    assert Pow(1, e, evaluate=False).is_algebraic is True
+    assert Pow(0, e, evaluate=False).is_algebraic is True
 
     a = Symbol('a', algebraic=True)
     azf = Symbol('azf', algebraic=True, zero=False)
@@ -1071,16 +1071,16 @@ def test_issue_2730():
 
 
 def test_issue_4149():
-    assert (3 + I).is_complex
+    assert (3 + I).is_complex is True
     assert (3 + I).is_imaginary is False
-    assert (3*I + S.Pi*I).is_imaginary
+    assert (3*I + S.Pi*I).is_imaginary is True
     # as Zero.is_imaginary is False, see issue 7649
     y = Symbol('y', real=True)
     assert (3*I + S.Pi*I + y*I).is_imaginary is None
     p = Symbol('p', positive=True)
-    assert (3*I + S.Pi*I + p*I).is_imaginary
+    assert (3*I + S.Pi*I + p*I).is_imaginary is True
     n = Symbol('n', negative=True)
-    assert (-3*I - S.Pi*I + n*I).is_imaginary
+    assert (-3*I - S.Pi*I + n*I).is_imaginary is True
 
     i = Symbol('i', imaginary=True)
     assert ([(i**a).is_imaginary for a in range(4)] ==
@@ -1089,12 +1089,12 @@ def test_issue_4149():
     # tests from the PR #7887:
     e = S("-sqrt(3)*I/2 + 0.866025403784439*I")
     assert e.is_real is False
-    assert e.is_imaginary
+    assert e.is_imaginary is True
 
 
 def test_issue_2920():
     n = Symbol('n', negative=True)
-    assert sqrt(n).is_imaginary
+    assert sqrt(n).is_imaginary is True
 
 
 def test_issue_7899():
@@ -1124,22 +1124,22 @@ def test_issue_8642():
 def test_issues_8632_8633_8638_8675_8992():
     p = Dummy(integer=True, positive=True)
     nn = Dummy(integer=True, nonnegative=True)
-    assert (p - S.Half).is_positive
-    assert (p - 1).is_nonnegative
-    assert (nn + 1).is_positive
-    assert (-p + 1).is_nonpositive
-    assert (-nn - 1).is_negative
+    assert (p - S.Half).is_positive is True
+    assert (p - 1).is_nonnegative is True
+    assert (nn + 1).is_positive is True
+    assert (-p + 1).is_nonpositive is True
+    assert (-nn - 1).is_negative is True
     prime = Dummy(prime=True)
-    assert (prime - 2).is_nonnegative
+    assert (prime - 2).is_nonnegative is True
     assert (prime - 3).is_nonnegative is None
     even = Dummy(positive=True, even=True)
-    assert (even - 2).is_nonnegative
+    assert (even - 2).is_nonnegative is True
 
     p = Dummy(positive=True)
-    assert (p/(p + 1) - 1).is_negative
-    assert ((p + 2)**3 - S.Half).is_positive
+    assert (p/(p + 1) - 1).is_negative is True
+    assert ((p + 2)**3 - S.Half).is_positive is True
     n = Dummy(negative=True)
-    assert (n - 3).is_nonpositive
+    assert (n - 3).is_nonpositive is True
 
 
 def test_issue_9115_9150():
@@ -1178,7 +1178,7 @@ def test_issue_10302():
     a = Dummy('a', zero=True)
     assert (a + I).is_zero is False
     assert (a + r*I).is_zero is None
-    assert (a + I).is_imaginary
+    assert (a + I).is_imaginary is True
     assert (a + x + I).is_imaginary is None
     assert (a + r*I + I).is_imaginary is None
 
