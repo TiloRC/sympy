@@ -1,0 +1,20 @@
+       14.07 real        13.54 user         0.22 sys
+time ./bin/test assumptions  13.54s user 0.23s system 97% cpu 14.081 total
+       14.08 real        13.76 user         0.18 sys
+time ./bin/test assumptions  13.77s user 0.19s system 99% cpu 14.090 total
+       14.16 real        13.87 user         0.18 sys
+time ./bin/test assumptions  13.87s user 0.18s system 99% cpu 14.166 total
+       14.54 real        14.11 user         0.21 sys
+time ./bin/test assumptions  14.11s user 0.21s system 98% cpu 14.543 total
+       14.11 real        13.79 user         0.17 sys
+time ./bin/test assumptions  13.80s user 0.17s system 98% cpu 14.119 total
+       14.20 real        13.90 user         0.17 sys
+time ./bin/test assumptions  13.91s user 0.18s system 99% cpu 14.209 total
+       14.17 real        13.82 user         0.18 sys
+time ./bin/test assumptions  13.83s user 0.19s system 98% cpu 14.179 total
+       14.28 real        13.99 user         0.17 sys
+time ./bin/test assumptions  13.99s user 0.18s system 99% cpu 14.292 total
+       14.08 real        13.80 user         0.17 sys
+time ./bin/test assumptions  13.81s user 0.18s system 99% cpu 14.092 total
+       14.17 real        13.81 user         0.18 sys
+time ./bin/test assumptions  13.81s user 0.18s system 98% cpu 14.177 total

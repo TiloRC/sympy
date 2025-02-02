@@ -12,8 +12,9 @@ from sympy.core import oo
 from sympy.logic.inference import satisfiable
 from sympy.assumptions.cnf import CNF, EncodedCNF
 from sympy.matrices.kind import MatrixKind
+from functools import cache
 
-
+#@cache
 def satask(proposition, assumptions=True, context=global_assumptions,
         use_known_facts=True, iterations=oo):
     """

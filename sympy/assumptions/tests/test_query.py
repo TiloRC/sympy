@@ -171,6 +171,7 @@ def test_negativeone():
 
 
 def test_infinity():
+    assert ask(Q.extended_positive(oo)) is True
     assert ask(Q.commutative(oo)) is True
     assert ask(Q.integer(oo)) is False
     assert ask(Q.rational(oo)) is False

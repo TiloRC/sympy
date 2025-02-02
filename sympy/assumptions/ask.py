@@ -11,6 +11,7 @@ from sympy.utilities.decorator import memoize_property
 from sympy.utilities.exceptions import (sympy_deprecation_warning,
                                         SymPyDeprecationWarning,
                                         ignore_warnings)
+from functools import cache
 
 
 # Memoization is necessary for the properties of AssumptionKeys to
@@ -363,7 +364,36 @@ def _extract_all_facts(assump, exprs):
                 facts.add(frozenset(args))
     return CNF(facts)
 
+import functools
 
+def cache_decorator(func):
+    cache = {}
+
+    cur_assm = True
+
+    @functools.wraps(func)
+    def wrapper(*args):
+        nonlocal cache, cur_assm
+
+        if not args:
+            raise ValueError("Function must be called with at least one argument")
+
+        prop = args[0]
+        assm = args[1] if len(args) > 1 else True
+
+        # Reset cache if `assm` changes
+        if assm != cur_assm:
+            cache = {}
+            cur_assm = assm
+        if prop in cache:
+            return cache[prop]
+        result = func(*args)
+        cache[prop] = result
+        return result
+
+    return wrapper
+
+@cache_decorator
 def ask(proposition, assumptions=True, context=global_assumptions):
     """
     Function to evaluate the proposition with assumptions.

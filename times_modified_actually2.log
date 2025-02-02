@@ -1,0 +1,10 @@
+./bin/test assumptions  11.82s user 0.19s system 98% cpu 12.175 total
+./bin/test assumptions  12.06s user 0.16s system 99% cpu 12.340 total
+./bin/test assumptions  12.39s user 0.17s system 99% cpu 12.664 total
+./bin/test assumptions  12.45s user 0.16s system 98% cpu 12.816 total
+./bin/test assumptions  12.28s user 0.15s system 99% cpu 12.542 total
+./bin/test assumptions  12.31s user 0.17s system 99% cpu 12.596 total
+./bin/test assumptions  12.27s user 0.16s system 99% cpu 12.542 total
+./bin/test assumptions  12.36s user 0.18s system 98% cpu 12.773 total
+./bin/test assumptions  12.68s user 0.21s system 97% cpu 13.185 total
+./bin/test assumptions  12.43s user 0.17s system 99% cpu 12.722 total
