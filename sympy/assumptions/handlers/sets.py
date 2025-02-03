@@ -753,7 +753,7 @@ def _(expr, assumptions):
             return True
         # Check based on the Gelfond-Schneider theorem:
         # If the base is algebraic and not equal to 0 or 1, and the exponent
-        # is irrational,then the result is transcendental.
+        # is irrational, then the result is transcendental.
         if ask(Q.ne(expr.base,0) & Q.ne(expr.base,1)) and exp_rational is False:
             return False
 
