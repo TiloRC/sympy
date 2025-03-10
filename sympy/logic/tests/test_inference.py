@@ -468,6 +468,7 @@ def test_issue_27733():
     assert satisfiable(cnf, use_lra_theory=True) is False
 
 
+
 def test_issue_27733_second_fix():
     # regression for flawed initial fix of issue 27733
     x0, x1 = symbols('x0 x1')
