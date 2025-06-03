@@ -295,16 +295,16 @@ def _simplex(A, B, C, D=None, dual=False):
     # Phase 1: find a feasible solution or determine none exist
 
     while True:
-        B = M[:-1, -1]
-        A = M[:-1, :-1]
+        rhs = M[:-1, -1]
+        lhs = M[:-1, :-1]
 
         # Find first infeasible row
-        k = next((i for i in range(B.rows) if B[i] < 0), None)
+        k = next((i for i in range(rhs.rows) if rhs[i] < 0), None)
         if k is None:
             break  # All RHS entries >= 0 -> feasible solution found
 
         # Choose pivot column, c
-        piv_cols = [_ for _ in range(A.cols) if A[k, _] < 0]
+        piv_cols = [_ for _ in range(lhs.cols) if lhs[k, _] < 0]
         if not piv_cols:
             raise InfeasibleLPError(filldedent("""
                 The constraint set is empty!"""))
@@ -313,23 +313,23 @@ def _simplex(A, B, C, D=None, dual=False):
         c = min(piv_cols, key=lambda i: X[i])
 
         # Choose pivot row, r
-        piv_rows = [_ for _ in range(A.rows) if A[_, c] > 0 and B[_] >= 0]
+        piv_rows = [_ for _ in range(lhs.rows) if lhs[_, c] > 0 and rhs[_] >= 0]
         piv_rows.append(k)
 
         # Choose pivot row with ratio test and break ties with Bland's rule
-        r = min(piv_rows, key=lambda i: (B[i] / A[i, c], Y[i]))
+        r = min(piv_rows, key=lambda i: (rhs[i] / lhs[i, c], Y[i]))
 
         M = _pivot(M, r, c)
         X[c], Y[r] = Y[r], X[c]
 
     # Phase 2: from a feasible solution, pivot to optimal
     while True:
-        B = M[:-1, -1]
-        A = M[:-1, :-1]
-        C = M[-1, :-1]
+        rhs = M[:-1, -1]
+        lhs = M[:-1, :-1]
+        cost = M[-1, :-1]
 
         # Choose a pivot column, c
-        piv_cols = [_ for _ in range(n) if C[_] < 0]
+        piv_cols = [_ for _ in range(n) if cost[_] < 0]
         if not piv_cols:
             break
 
@@ -337,14 +337,14 @@ def _simplex(A, B, C, D=None, dual=False):
         c = min(piv_cols, key=lambda i: X[i])
 
         # Choose a pivot row, r
-        piv_rows = [_ for _ in range(m) if A[_, c] > 0]
+        piv_rows = [_ for _ in range(m) if lhs[_, c] > 0]
         if not piv_rows:
             raise UnboundedLPError(filldedent("""
                 Objective function can assume
                 arbitrarily large values!"""))
 
         # Choose pivot row with ratio test and break ties with Bland's rule
-        r = min(piv_rows, key=lambda i: (B[i] / A[i, c], Y[i]))
+        r = min(piv_rows, key=lambda i: (rhs[i] / lhs[i, c], Y[i]))
 
         M = _pivot(M, r, c)
         X[c], Y[r] = Y[r], X[c]
