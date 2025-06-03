@@ -60,6 +60,7 @@ Here is a simple 1-D system: minimize `x` given that ``x >= 1``.
     sympy.solvers.simplex.InfeasibleLPError:
     Inconsistent/False constraint
 """
+from collections import namedtuple
 
 from sympy.core import sympify
 from sympy.core.exprtools import factor_terms
@@ -293,8 +294,9 @@ def _simplex(A, B, C, D=None, dual=False):
 
     # x variables have priority over y variables during Bland's rule
     # since False < True
-    X = [(False, j) for j in range(n)]
-    Y = [(True, i) for i in range(m)]
+    Var = namedtuple("Var", ["is_dual", "index"])
+    X = [Var(False, j) for j in range(n)]
+    Y = [Var(True, i) for i in range(m)]
 
     # Phase 1: find a feasible solution or determine none exist
 
@@ -353,17 +355,17 @@ def _simplex(A, B, C, D=None, dual=False):
     argmax = [None] * n
     argmin_dual = [None] * m
 
-    for i, (v, n) in enumerate(X):
-        if v == False:
-            argmax[n] = S.Zero
+    for i, var in enumerate(X):
+        if var.is_dual == False:
+            argmax[var.index] = S.Zero
         else:
-            argmin_dual[n] = M[-1, i]
+            argmin_dual[var.index] = M[-1, i]
 
-    for i, (v, n) in enumerate(Y):
-        if v == True:
-            argmin_dual[n] = S.Zero
+    for i, var in enumerate(Y):
+        if var.is_dual == True:
+            argmin_dual[var.index] = S.Zero
         else:
-            argmax[n] = M[i, -1]
+            argmax[var.index] = M[i, -1]
 
     return -M[-1, -1], argmax, argmin_dual
 
