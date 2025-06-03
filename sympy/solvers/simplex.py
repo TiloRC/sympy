@@ -303,16 +303,11 @@ def _simplex(A, B, C, D=None, dual=False):
     while True:
         B = M[:-1, -1]
         A = M[:-1, :-1]
-        if all(B[i] >= 0 for i in range(B.rows)):
-            # We have found a feasible solution
-            break
 
-        # Find k: first row with a negative rightmost entry
-        for k in range(B.rows):
-            if B[k] < 0:
-                break  # use current value of k below
-        else:
-            pass  # error will raise below
+        # Find first infeasible row
+        k = next((i for i in range(B.rows) if B[i] < 0), None)
+        if k is None:
+            break  # All RHS entries >= 0 -> feasible solution found
 
         # Choose pivot column, c
         piv_cols = [_ for _ in range(A.cols) if A[k, _] < 0]
