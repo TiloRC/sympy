@@ -292,8 +292,7 @@ def _simplex(A, B, C, D=None, dual=False):
     X = [Var(False, j) for j in range(n)]
     Y = [Var(True, i) for i in range(m)]
 
-    # Phase 1: find a feasible solution or determine none exist
-
+    # Phase 1: find a feasible solution
     while True:
         rhs = M[:-1, -1]
         lhs = M[:-1, :-1]
@@ -303,51 +302,47 @@ def _simplex(A, B, C, D=None, dual=False):
         if k is None:
             break  # All RHS entries >= 0 -> feasible solution found
 
-        # Choose pivot column, c
-        piv_cols = [_ for _ in range(lhs.cols) if lhs[k, _] < 0]
-        if not piv_cols:
+        pivot_column_candidates = [_ for _ in range(lhs.cols) if lhs[k, _] < 0]
+        if not pivot_column_candidates:
             raise InfeasibleLPError(filldedent("""
                 The constraint set is empty!"""))
 
         # Choose lexicographically smallest variable (Bland's rule)
-        c = min(piv_cols, key=lambda i: X[i])
+        pivot_column = min(pivot_column_candidates, key=lambda i: X[i])
 
-        # Choose pivot row, r
-        piv_rows = [_ for _ in range(lhs.rows) if lhs[_, c] > 0 and rhs[_] >= 0]
-        piv_rows.append(k)
+        pivot_row_candidates = [_ for _ in range(lhs.rows) if lhs[_, pivot_column] > 0 and rhs[_] >= 0]
+        pivot_row_candidates.append(k)
 
         # Choose pivot row with ratio test and break ties with Bland's rule
-        r = min(piv_rows, key=lambda i: (rhs[i] / lhs[i, c], Y[i]))
+        pivot_row = min(pivot_row_candidates, key=lambda i: (rhs[i] / lhs[i, pivot_column], Y[i]))
 
-        M = _pivot(M, r, c)
-        X[c], Y[r] = Y[r], X[c]
+        M = _pivot(M, pivot_row, pivot_column)
+        X[pivot_column], Y[pivot_row] = Y[pivot_row], X[pivot_column]
 
-    # Phase 2: from a feasible solution, pivot to optimal
+    # Phase 2: optimize
     while True:
         rhs = M[:-1, -1]
         lhs = M[:-1, :-1]
         cost = M[-1, :-1]
 
-        # Choose a pivot column, c
-        piv_cols = [_ for _ in range(n) if cost[_] < 0]
-        if not piv_cols:
-            break
+        pivot_column_candidates = [_ for _ in range(n) if cost[_] < 0]
+        if not pivot_column_candidates:
+            break # No improving direction -> current solution is optimal
 
         # Choose lexicographically smallest variable (Bland's rule)
-        c = min(piv_cols, key=lambda i: X[i])
+        pivot_column = min(pivot_column_candidates, key=lambda i: X[i])
 
-        # Choose a pivot row, r
-        piv_rows = [_ for _ in range(m) if lhs[_, c] > 0]
-        if not piv_rows:
+        pivot_row_candidates = [_ for _ in range(m) if lhs[_, pivot_column] > 0]
+        if not pivot_row_candidates:
             raise UnboundedLPError(filldedent("""
                 Objective function can assume
                 arbitrarily large values!"""))
 
         # Choose pivot row with ratio test and break ties with Bland's rule
-        r = min(piv_rows, key=lambda i: (rhs[i] / lhs[i, c], Y[i]))
+        pivot_row = min(pivot_row_candidates, key=lambda i: (rhs[i] / lhs[i, pivot_column], Y[i]))
 
-        M = _pivot(M, r, c)
-        X[c], Y[r] = Y[r], X[c]
+        M = _pivot(M, pivot_row, pivot_column)
+        X[pivot_column], Y[pivot_row] = Y[pivot_row], X[pivot_column]
 
     argmax = [None] * n
     argmin_dual = [None] * m
