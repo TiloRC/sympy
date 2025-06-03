@@ -148,12 +148,6 @@ def _pivot(M, i, j):
     return A
 
 
-def _choose_pivot_row(A, B, candidate_rows, pivot_col, Y):
-    # Choose row with smallest ratio
-    # If there are ties, pick using Bland's rule
-    return min(candidate_rows, key=lambda i: (B[i] / A[i, pivot_col], Y[i]))
-
-
 def _simplex(A, B, C, D=None, dual=False):
     """Return ``(o, x, y)`` obtained from the two-phase simplex method
     using Bland's rule: ``o`` is the minimum value of primal,
@@ -314,12 +308,16 @@ def _simplex(A, B, C, D=None, dual=False):
         if not piv_cols:
             raise InfeasibleLPError(filldedent("""
                 The constraint set is empty!"""))
-        _, c = min((X[i], i) for i in piv_cols) # Bland's rule
+
+        # Choose lexicographically smallest variable (Bland's rule)
+        c = min(piv_cols, key=lambda i: X[i])
 
         # Choose pivot row, r
         piv_rows = [_ for _ in range(A.rows) if A[_, c] > 0 and B[_] >= 0]
         piv_rows.append(k)
-        r = _choose_pivot_row(A, B, piv_rows, c, Y)
+
+        # Choose pivot row with ratio test and break ties with Bland's rule
+        r = min(piv_rows, key=lambda i: (B[i] / A[i, c], Y[i]))
 
         M = _pivot(M, r, c)
         X[c], Y[r] = Y[r], X[c]
@@ -334,7 +332,9 @@ def _simplex(A, B, C, D=None, dual=False):
         piv_cols = [_ for _ in range(n) if C[_] < 0]
         if not piv_cols:
             break
-        _, c = min((X[i], i) for i in piv_cols)  # Bland's rule
+
+        # Choose lexicographically smallest variable (Bland's rule)
+        c = min(piv_cols, key=lambda i: X[i])
 
         # Choose a pivot row, r
         piv_rows = [_ for _ in range(m) if A[_, c] > 0]
@@ -342,7 +342,9 @@ def _simplex(A, B, C, D=None, dual=False):
             raise UnboundedLPError(filldedent("""
                 Objective function can assume
                 arbitrarily large values!"""))
-        r = _choose_pivot_row(A, B, piv_rows, c, Y)
+
+        # Choose pivot row with ratio test and break ties with Bland's rule
+        r = min(piv_rows, key=lambda i: (B[i] / A[i, c], Y[i]))
 
         M = _pivot(M, r, c)
         X[c], Y[r] = Y[r], X[c]
