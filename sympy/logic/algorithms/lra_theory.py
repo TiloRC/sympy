@@ -269,7 +269,22 @@ class LRASolver():
 
                 raise ValueError(f"Unhandled Predicate: {prop}")
 
-            assert prop.function in ALLOWED_PRED
+            if prop.function in (Q.positive, Q.extended_positive):
+                prop = Q.gt(prop.arguments[0], 0)
+            elif prop.function in (Q.negative, Q.extended_negative):
+                prop = Q.lt(prop.arguments[0], 0)
+            elif prop.function == Q.zero:
+                prop = Q.eq(prop.arguments[0], 0)
+            elif prop.function in (Q.nonpositive, Q.extended_nonpositive):
+                prop = Q.le(prop.arguments[0], 0)
+            elif prop.function in (Q.nonpositive, Q.extended_nonpositive):
+                prop = Q.ge(prop.arguments[0], 0)
+            elif prop.function in (Q.zero, Q.extended_nonzero):
+                prop = Q.ne(prop.arguments[0], 0)
+
+            # assert prop.function in ALLOWED_PRED
+            if prop.function not in ALLOWED_PRED:
+                continue
             if prop.lhs == S.NaN or prop.rhs == S.NaN:
                 raise ValueError(f"{prop} contains nan")
             if prop.lhs.is_imaginary or prop.rhs.is_imaginary:

@@ -87,8 +87,8 @@ def check_satisfiability(prop, _prop, factbase):
     sat_false = factbase.copy()
     sat_true.add_from_cnf(prop)
     sat_false.add_from_cnf(_prop)
-    can_be_true = satisfiable(sat_true)
-    can_be_false = satisfiable(sat_false)
+    can_be_true = satisfiable(sat_true, use_lra_theory=True)
+    can_be_false = satisfiable(sat_false, use_lra_theory=True)
 
     if can_be_true and can_be_false:
         return None

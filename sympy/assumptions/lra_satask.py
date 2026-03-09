@@ -51,9 +51,9 @@ def check_satisfiability(prop, _prop, factbase):
 
     all_pred, all_exprs = get_all_pred_and_expr_from_enc_cnf(sat_true)
 
-    for pred in all_pred:
-        if pred.function not in WHITE_LIST and pred.function != Q.ne:
-            raise UnhandledInput(f"LRASolver: {pred} is an unhandled predicate")
+    # for pred in all_pred:
+    #     if pred.function not in WHITE_LIST and pred.function != Q.ne:
+    #         raise UnhandledInput(f"LRASolver: {pred} is an unhandled predicate")
     for expr in all_exprs:
         if expr.kind == MatrixKind(NumberKind):
             raise UnhandledInput(f"LRASolver: {expr} is of MatrixKind")

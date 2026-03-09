@@ -548,11 +548,11 @@ def ask(proposition, assumptions=True, context=global_assumptions):
     if res is not None:
         return res
 
-    try:
-        res = lra_satask(proposition, assumptions=assumptions, context=context)
-    except UnhandledInput:
-        return None
-
+    # try:
+    #     res = lra_satask(proposition, assumptions=assumptions, context=context)
+    # except UnhandledInput:
+    #     return None
+    #
     return res
 
 
