@@ -1141,6 +1141,30 @@ def test_bounded():
 
 
 def test_unbounded():
+
+
+
+
+    from sympy.assumptions.assume import recursive_ask
+    from sympy.assumptions.ask import _ask_single_fact, _extract_all_facts
+    from sympy.assumptions.cnf import CNF, EncodedCNF, Literal
+
+    proposition = Q.nonzero( y)
+    assumptions = ~Q.zero(y)
+    assump_cnf = CNF.from_prop(assumptions)
+    key, args = proposition.function, proposition.arguments
+
+    local_facts = _extract_all_facts(assump_cnf, args)
+
+
+
+    assert _ask_single_fact(key,  local_facts) is True
+
+    assert recursive_ask(Q.nonzero( y),  ~Q.zero(y)) is True
+
+    assert recursive_ask(Q.nonzero(1 / y), Q.infinite(x) & Q.finite(y) & ~Q.zero(y)) is True
+
+
     assert ask(Q.infinite(I * oo)) is True
     assert ask(Q.infinite(1 + I*oo)) is True
     assert ask(Q.infinite(3 * (I * oo))) is True
