@@ -460,3 +460,21 @@ def test_empty_cnf():
     lra, conflict = LRASolver.from_encoded_cnf(enc)
     assert len(conflict) == 0
     assert lra.check() == (True, {})
+
+
+def test_duplicate_literals():
+    # Test that ValueError is raised when distinct literals represent same boundary
+    # Q.gt(x, 0) and Q.lt(0, x) map to same boundary
+    enc = EncodedCNF()
+    enc.encoding = {Q.gt(x, 0): 1, Q.lt(0, x): 2}
+    raises(ValueError, lambda: LRASolver.from_encoded_cnf(enc))
+
+    # Same for Q.le and Q.ge with reversed arguments
+    enc = EncodedCNF()
+    enc.encoding = {Q.le(x, 1): 1, Q.ge(1, x): 2}
+    raises(ValueError, lambda: LRASolver.from_encoded_cnf(enc))
+
+    # Same for Q.eq
+    enc = EncodedCNF()
+    enc.encoding = {Q.eq(x, 0): 1, Q.eq(0, x): 2}
+    raises(ValueError, lambda: LRASolver.from_encoded_cnf(enc))

@@ -342,6 +342,8 @@ class LRASolver():
             upper = var_coeff > 0 if not equality else None
             strict = prop.function in [Q.gt, Q.lt]
             b = Boundary(var_to_lra_var[var], -const, upper, equality, strict)
+            if b in encoding.values():
+                raise ValueError(f"Literals with same mathematical meaning are not handled: {prop}")
             encoding[enc] = b
 
         fs = [v.free_symbols for v in nonbasic + basic]
