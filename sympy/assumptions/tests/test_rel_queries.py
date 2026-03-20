@@ -237,3 +237,23 @@ def test_equality_failing():
     assert ask(Q.prime(x), Q.eq(x, y) & Q.prime(y)) is True
     assert ask(Q.real(x), Q.eq(x, y) & Q.real(y)) is True
     assert ask(Q.imaginary(x), Q.eq(x, y) & Q.imaginary(y)) is True
+
+
+def test_redundant_literals():
+    x, y = symbols("x y", real=True)
+    # These contain mathematically equivalent literals that should be normalized
+    # to avoid ValueError in LRASolver.from_encoded_cnf
+    assert lra_satask(Q.gt(x, 0), Q.lt(0, x)) is True
+    assert lra_satask(Q.lt(0, x), Q.gt(x, 0)) is True
+    assert lra_satask(Q.ge(x, 1), Q.le(1, x)) is True
+    assert lra_satask(Q.le(1, x), Q.ge(x, 1)) is True
+    assert lra_satask(Q.eq(x, y), Q.eq(y, x)) is True
+
+    # Complex formula with redundancy
+    assert lra_satask(Q.gt(x, 0), Q.gt(x, 0) | Q.lt(0, x)) is None
+    assert lra_satask(Q.gt(x, 0), Q.gt(x, 0) & Q.lt(0, x)) is True
+
+    # Test normalization of expanded expressions
+    assert lra_satask(Q.gt(x - y, 0), Q.lt(0, x - y)) is True
+    assert lra_satask(Q.gt(x - y, 0), Q.gt(x, y)) is True
+    assert lra_satask(Q.gt(x, y), Q.lt(y, x)) is True
