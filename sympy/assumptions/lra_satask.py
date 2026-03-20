@@ -4,8 +4,11 @@ from sympy.assumptions.cnf import CNF, EncodedCNF
 from sympy.assumptions.ask import Q
 from sympy.core.numbers import I
 from sympy.logic.inference import satisfiable
-from sympy.logic.algorithms.lra_theory import UnhandledInput
+from sympy.logic.algorithms.lra_theory import (
+    UnhandledInput, _sep_const_terms, _sep_const_coeff, _eval_binrel
+)
 from sympy.core.kind import NumberKind
+from sympy.core.add import Add
 from sympy.assumptions.assume import AppliedPredicate
 from sympy.core.singleton import S
 
@@ -196,6 +199,7 @@ def _preprocess(enc_cnf, real_exprs):
     new_data = []
 
     def get_enc(p):
+        p = _pred_to_binrel(p)
         if p not in new_encoding:
             new_encoding[p] = len(new_encoding) + 1
         return new_encoding[p]
@@ -235,7 +239,12 @@ def _preprocess(enc_cnf, real_exprs):
 
             prop = _pred_to_binrel(prop)
 
+            if prop in (True, False):
+                new_clause.append(sign * get_enc(prop))
+                continue
+
             if (prop.function == Q.eq and is_negated) or (prop.function == Q.ne and not is_negated):
+
                 # (x != y) -> (x > y) | (x < y)
                 arg1, arg2 = prop.arguments
                 new_clause.extend([get_enc(Q.gt(arg1, arg2)), get_enc(Q.lt(arg1, arg2))])
@@ -257,6 +266,7 @@ def _pred_to_binrel(pred):
     if not isinstance(pred, AppliedPredicate):
         return pred
 
+    # Step 1: Initial normalization of unary predicates to binary relations
     if pred.function in (Q.positive, Q.extended_positive):
         pred = Q.gt(pred.arguments[0], 0)
     elif pred.function in (Q.negative, Q.extended_negative):
@@ -270,7 +280,64 @@ def _pred_to_binrel(pred):
     elif pred.function in (Q.nonzero, Q.extended_nonzero):
         pred = Q.ne(pred.arguments[0], 0)
 
-    return pred
+    if pred.function not in (Q.gt, Q.lt, Q.ge, Q.le, Q.eq, Q.ne):
+        return pred
+
+    # Step 2: Fully canonicalize to match LRASolver's boundary logic
+    try:
+        lhs, rhs = pred.arguments
+        expr = (lhs - rhs).expand()
+        rel = pred.function
+
+        # Handle constant comparisons
+        res = _eval_binrel(rel(expr, 0))
+        if res in (True, False):
+            return res
+
+        # Split into variable terms and constant
+        pure_vars, const = _sep_const_terms(expr)
+        if pure_vars == 0:
+            return pred
+
+        # Extract overall coefficient from variable terms
+        pure_vars, var_coeff = _sep_const_coeff(pure_vars)
+
+        # Canonicalize pure_vars itself: ensure the term with the string-wise
+        # smallest symbol has a positive coefficient. This matches how LRASolver
+        # uses s_subs[vars] keys for slack variables.
+        syms = sorted(pure_vars.free_symbols, key=str)
+        if syms:
+            lead_sym = syms[0]
+            if pure_vars.coeff(lead_sym) < 0:
+                pure_vars = (-pure_vars).expand()
+                var_coeff = -var_coeff
+
+        # Replicate LRASolver logic to determine if it's an upper or lower bound
+        equality = rel == Q.eq
+        if rel in (Q.gt, Q.ge):
+            v_coeff = -var_coeff
+            c = -const
+        else:
+            v_coeff = var_coeff
+            c = const
+
+        upper = v_coeff > 0 if not equality else None
+        b_bound = -c / v_coeff
+        strict = rel in (Q.gt, Q.lt)
+
+        # Return a unique canonical AppliedPredicate for this boundary
+        if equality:
+            return Q.eq(pure_vars, b_bound)
+        if rel == Q.ne:
+            return Q.ne(pure_vars, b_bound)
+
+        if upper:
+            return Q.lt(pure_vars, b_bound) if strict else Q.le(pure_vars, b_bound)
+        else:
+            return Q.lt(b_bound, pure_vars) if strict else Q.le(b_bound, pure_vars)
+
+    except Exception:
+        return pred
 
 
 def get_all_pred_and_expr_from_enc_cnf(enc_cnfs):
