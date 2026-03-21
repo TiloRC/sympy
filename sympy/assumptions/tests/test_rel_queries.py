@@ -150,6 +150,19 @@ def test_failing_number_line_properties():
     assert ask(1/a >= 1/b, (a <= b) & Q.negative(x) & Q.negative(b)) is True
 
 
+def test_ask_lra_redundancy():
+    a, b = symbols("a b", real=True)
+    assert ask(Q.ge(a, 1), Q.ge(2*a, 2)) is True
+    assert ask(Q.ge(2*a, 2), Q.ge(a, 1)) is True
+    # Formula: (p1 | A) & (p3 | B) & ~A & ~B
+    # This should trigger the same logic as satisfiable
+    p1 = Q.ge(a, 1)
+    p2 = Q.ge(2*a, 2)
+    p3 = Q.lt(a, 1)
+    p4 = Q.lt(2*a, 2)
+    assert ask(p3, p1 & p2 & (p4 | ~p4)) is False
+
+
 def test_equality():
     # test symmetry and reflexivity
     assert ask(Q.eq(x, x)) is True
