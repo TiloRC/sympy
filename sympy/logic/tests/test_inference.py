@@ -118,6 +118,26 @@ def test_dpll_satisfiable():
     assert dpll_satisfiable( Equivalent(A, B) & ~A ) == {A: False, B: False}
 
 
+def test_satisfiable_lra_redundancy():
+    # Regression test for LRASolver's conflict generation when using redundant constraints.
+    # We include redundant literals (p2, p4) that are NOT part of the direct conflict
+    # but map to the same mathematical boundaries. This forces the solver to track
+    # the correct literals or risk returning meaningless conflict clauses.
+    x, y = symbols('x, y', real=True)
+    p1 = Q.ge(x, 1)
+    p2 = Q.ge(2*x, 2)
+    p3 = Q.lt(x, 1)
+    p4 = Q.lt(2*x, 2)
+    
+    # Formula that is mathematically UNSAT at level 0
+    phi = p1 & p3 & (p2 | ~p2) & (p4 | ~p4)
+    assert satisfiable(phi, use_lra_theory=True) is False
+
+    # More complex case with multiple redundancies
+    phi = (Q.ge(x, 1) | Q.gt(y, 1)) & (Q.lt(x, 1) | Q.lt(y, 0)) & Q.eq(y, 0) & (Q.ge(2*x, 2) | Q.lt(2*x, 2))
+    assert satisfiable(phi, use_lra_theory=True) is False
+
+
 def test_dpll2_satisfiable():
     A, B, C = symbols('A,B,C')
     assert dpll2_satisfiable( A & ~A ) is False
