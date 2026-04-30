@@ -18,6 +18,9 @@ from sympy.assumptions.cnf import EncodedCNF
 
 from sympy.logic.algorithms.lra_theory import LRASolver
 
+TRACE = False
+TRACE_CLAUSES = False
+
 
 def dpll_satisfiable(expr, all_models=False, use_lra_theory=False):
     """
@@ -89,7 +92,7 @@ class SATSolver:
 
     def __init__(self, clauses, variables, var_settings, symbols=None,
                 heuristic='vsids', clause_learning='none', INTERVAL=500,
-                 lra_theory = None):
+                 lra_theory=None, trace_graph=None):
 
         self.var_settings = var_settings
         self.heuristic = heuristic
@@ -139,6 +142,15 @@ class SATSolver:
         self.original_num_clauses = len(self.clauses)
 
         self.lra = lra_theory
+
+        from sympy.logic.algorithms.sat_trace import get_active_trace, FORCE_TRACE
+        self.trace_graph = trace_graph if trace_graph is not None else get_active_trace()
+        if self.trace_graph is None and FORCE_TRACE:
+            from sympy.logic.algorithms.sat_trace import TraceGraph
+            self.trace_graph = TraceGraph()
+        
+        if self.trace_graph is not None:
+            self.trace_graph.attach_solver(self)
 
     def _initialize_variables(self, variables):
         """Set up the variable data structures needed."""
@@ -199,9 +211,23 @@ class SATSolver:
         #  variable setting in successive rounds
         flip_var = False
 
+        if self.trace_graph is not None:
+            def trace(msg):
+                self.trace_graph.trace(msg)
+        else:
+            def trace(msg):
+                pass
+
         # Check if unit prop says the theory is unsat right off the bat
+        old_vars = set(self.var_settings)
         self._simplify()
+        for lit in self.var_settings:
+            if lit not in old_vars:
+                trace(f"Unit Propagation ({lit})")
+        trace("STATE")
+
         if self.is_unsatisfied:
+            trace("CONFLICT")
             return
 
         # While the theory still has clauses remaining
@@ -215,6 +241,7 @@ class SATSolver:
                 # We have just backtracked and we are trying to opposite literal
                 flip_var = False
                 lit = self._current_level.decision
+                trace(str(lit))
 
             else:
                 # Pick a literal to set
@@ -235,6 +262,7 @@ class SATSolver:
                     else:
                         res = None
                     if res is None or res[0]:
+                        trace("SATISFIABLE")
                         yield {self.symbols[abs(lit) - 1]:
                                     lit > 0 for lit in self.var_settings}
                     else:
@@ -256,17 +284,24 @@ class SATSolver:
 
                 # Start the new decision level
                 self.levels.append(Level(lit))
+                trace(str(lit))
 
             # Assign the literal, updating the clauses it satisfies
             self._assign_literal(lit)
 
             # _simplify the theory
+            old_vars = set(self.var_settings)
             self._simplify()
+            for new_lit in self.var_settings:
+                if new_lit not in old_vars:
+                    trace(f"Unit Propagation ({new_lit})")
+            trace("STATE")
 
             # Check if we've made the theory unsat
             if self.is_unsatisfied:
 
                 self.is_unsatisfied = False
+                trace("CONFLICT")
 
                 # We unroll all of the decisions until we can flip a literal
                 while self._current_level.flipped:
@@ -275,6 +310,15 @@ class SATSolver:
                     # If we've unrolled all the way, the theory is unsat
                     if 1 == len(self.levels):
                         return
+
+                # Detect and add a learned clause
+                self.add_learned_clause(self.compute_conflict())
+
+                # Try the opposite setting of the most recent decision
+                flip_lit = -self._current_level.decision
+                self._undo()
+                self.levels.append(Level(flip_lit, flipped=True))
+                flip_var = True
 
                 # Detect and add a learned clause
                 self.add_learned_clause(self.compute_conflict())
