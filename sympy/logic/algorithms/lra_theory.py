@@ -182,6 +182,13 @@ class LRASolver():
         self.is_sat = True  # While True, all constraints asserted so far are satisfiable
         self.result = None  # always one of: (True, assignment), (False, conflict clause), None
 
+    def __repr__(self):
+        status = "SAT" if self.is_sat else "UNSAT/PENDING"
+        res = [f"LRASolver(status={status})"]
+        for v in self.all_var:
+            res.append(f"  {v!r:10}: {v.lower!r} <= {v.assign!r} <= {v.upper!r}")
+        return "\n".join(res)
+
     @staticmethod
     def from_encoded_cnf(encoded_cnf, testing_mode=False):
         """
@@ -884,7 +891,13 @@ class LRARational():
         return self.value[index]
 
     def __repr__(self):
-        return repr(self.value)
+        val, delta = self.value
+        if delta == 0:
+            return f"{val} + 0eps"
+        sign = "+" if delta > 0 else "-"
+        abs_delta = abs(delta)
+        delta_str = f"{abs_delta}eps" if abs_delta != 1 else "eps"
+        return f"{val} {sign} {delta_str}"
 
 
 class LRAVariable():
