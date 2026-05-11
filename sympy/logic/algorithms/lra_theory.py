@@ -371,6 +371,7 @@ class LRASolver():
         anything was asserted.
         """
         self.result = None
+        self.is_sat = True
         for var in self.all_var:
             var.lower = LRARational(-float("inf"), 0)
             var.lower_from_eq = False
