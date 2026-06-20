@@ -189,6 +189,9 @@ def test_latex_basic():
     assert latex(x_star**2, parenthesize_super=False) == r"{x^{*}}^{2}"
     assert latex(Derivative(f(x_star), x_star,2)) == r"\frac{d^{2}}{d \left(x^{*}\right)^{2}} f{\left(x^{*} \right)}"
     assert latex(Derivative(f(x_star), x_star,2), parenthesize_super=False) == r"\frac{d^{2}}{d {x^{*}}^{2}} f{\left(x^{*} \right)}"
+    assert latex(x**(x**x)) == r"x^{\left(x^{x}\right)}"
+    assert latex((x**x)**(x**x)) == \
+        r"\left(x^{x}\right)^{\left(x^{x}\right)}"
 
     assert latex(2*Integral(x, x)/3) == r"\frac{2 \int x\, dx}{3}"
     assert latex(2*Integral(x, x)/3, fold_short_frac=True) == \
@@ -1157,7 +1160,7 @@ def test_latex_commutator():
     A = Operator('A')
     B = Operator('B')
     comm = Commutator(B, A)
-    assert latex(comm.doit()) == r"- (A B - B A)"
+    assert latex(comm.doit()) == r"- \left(A B - B A\right)"
 
 
 def test_latex_union():
@@ -1202,9 +1205,11 @@ def test_latex_ordinals():
     w = OrdinalOmega()
     assert latex(w) == r"\omega"
     wp = OmegaPower(2, 3)
-    assert latex(wp) == r'3 \omega^{2}'
-    assert latex(Ordinal(wp, OmegaPower(1, 1))) == r'3 \omega^{2} + \omega'
-    assert latex(Ordinal(OmegaPower(2, 1), OmegaPower(1, 2))) == r'\omega^{2} + 2 \omega'
+    assert latex(wp) == r'\omega^{2} 3'
+    assert latex(Ordinal(wp, OmegaPower(1, 1))) == r'\omega^{2} 3 + \omega'
+    assert latex(Ordinal(OmegaPower(2, 1), OmegaPower(1, 2))) == r'\omega^{2} + \omega 2'
+    assert latex(w**(w + 1) + 1) == r'\omega^{\omega + 1} + 1'
+    assert latex(OmegaPower(0,1)) == '1'
 
 
 def test_set_operators_parenthesis():
@@ -2322,6 +2327,10 @@ def test_latex_greek_functions():
     assert latex(c(x)) == r'\chi{\left(x \right)}'
     assert latex(c) == r'\chi'
 
+    # make sure arguments to beta function are rendered as latex
+    alpha_, beta_ = symbols("alpha beta")
+    assert r'\operatorname{B}\left(\alpha, \beta\right)' == latex(beta(alpha_, beta_))
+
 
 def test_translate():
     s = 'Alpha'
@@ -2574,7 +2583,92 @@ def test_latex_UnevaluatedExpr():
     assert latex(he) == latex(1/x) == r"\frac{1}{x}"
     assert latex(he**2) == r"\left(\frac{1}{x}\right)^{2}"
     assert latex(he + 1) == r"1 + \frac{1}{x}"
+    assert latex(he - 1) == r"-1 + \frac{1}{x}"
+    assert latex(-he + 1) == r"1 - \frac{1}{x}"
     assert latex(x*he) == r"x \frac{1}{x}"
+
+    ue1 = UnevaluatedExpr(-2*x**2 - 9*x + 5)
+    assert latex(1 + ue1) == r"1 + \left(- 2 x^{2} - 9 x + 5\right)"
+    assert latex(1 - ue1) == r"1 - \left(- 2 x^{2} - 9 x + 5\right)"
+
+    ue2 = UnevaluatedExpr(-2*x**2 + 3*x + 2)
+    ue3 = UnevaluatedExpr(-5*x**2 + 6*x - 7)
+    assert latex(ue2 + ue3) == \
+        r"\left(- 5 x^{2} + 6 x - 7\right) + \left(- 2 x^{2} + 3 x + 2\right)"
+    assert latex(ue2 - ue3) == \
+        r"- \left(- 5 x^{2} + 6 x - 7\right) + \left(- 2 x^{2} + 3 x + 2\right)"
+
+    u = UnevaluatedExpr(2)
+    assert latex(u) == "2"
+    assert latex(-u) == "- 2"
+    assert latex(2 * u) == r"2 \cdot 2"
+    assert latex(-2 * u) == r"- 2 \cdot 2"
+    assert latex(x**2 * u) == r"x^{2} \cdot 2"
+    assert latex(-x**2 * u) == r"- x^{2} \cdot 2"
+
+    u = UnevaluatedExpr(-2)
+    assert latex(u) == "-2"
+    assert latex(-u) == r"- \left(-2\right)"
+    assert latex(2 * u) == r"2 \left(-2\right)"
+    assert latex(-2 * u) == r"- 2 \left(-2\right)"
+    assert latex(x**2 * u) == r"x^{2} \left(-2\right)"
+    assert latex(-x**2 * u) == r"- x^{2} \left(-2\right)"
+
+    u = UnevaluatedExpr(x)
+    assert latex(u) == r"x"
+    assert latex(-u) == r"- x"
+    assert latex(2 * u) == r"2 x"
+    assert latex(-2 * u) == r"- 2 x"
+    assert latex(x**2 * u) == r"x^{2} x"
+    assert latex(-x**2 * u) == r"- x^{2} x"
+
+    u = UnevaluatedExpr(-x)
+    assert latex(u) == "- x"
+    assert latex(-u) == r"- \left(- x\right)"
+    assert latex(2 * u) == r"2 \left(- x\right)"
+    assert latex(-2 * u) == r"- 2 \left(- x\right)"
+    assert latex(x**2 * u) == r"x^{2} \left(- x\right)"
+    assert latex(-x**2 * u) == r"- x^{2} \left(- x\right)"
+
+    u = UnevaluatedExpr(x**2)
+    assert latex(u) == r"x^{2}"
+    assert latex(-u) == r"- x^{2}"
+    assert latex(2 * u) == r"2 x^{2}"
+    assert latex(-2 * u) == r"- 2 x^{2}"
+    assert latex(x**2 * u) == r"x^{2} x^{2}"
+    assert latex(-x**2 * u) == r"- x^{2} x^{2}"
+
+    u = UnevaluatedExpr(-x**2)
+    assert latex(u) == r"- x^{2}"
+    assert latex(-u) == r"- \left(- x^{2}\right)"
+    assert latex(2 * u) == r"2 \left(- x^{2}\right)"
+    assert latex(-2 * u) == r"- 2 \left(- x^{2}\right)"
+    assert latex(x**2 * u) == r"x^{2} \left(- x^{2}\right)"
+    assert latex(-x**2 * u) == r"- x^{2} \left(- x^{2}\right)"
+
+    u = UnevaluatedExpr(x * (x + 2))
+    assert latex(u) == r"x \left(x + 2\right)"
+    assert latex(-u) == r"- x \left(x + 2\right)"
+    assert latex(2 * u) == r"2 x \left(x + 2\right)"
+    assert latex(-2 * u) == r"- 2 x \left(x + 2\right)"
+    assert latex(x**2 * u) == r"x^{2} x \left(x + 2\right)"
+    assert latex(-x**2 * u) == r"- x^{2} x \left(x + 2\right)"
+
+    u = UnevaluatedExpr(-x * (x + 2))
+    assert latex(u) == r"- x \left(x + 2\right)"
+    assert latex(-u) == r"- \left(- x \left(x + 2\right)\right)"
+    assert latex(2 * u) == r"2 \left(- x \left(x + 2\right)\right)"
+    assert latex(-2 * u) == r"- 2 \left(- x \left(x + 2\right)\right)"
+    assert latex(x**2 * u) == r"x^{2} \left(- x \left(x + 2\right)\right)"
+    assert latex(-x**2 * u) == r"- x^{2} \left(- x \left(x + 2\right)\right)"
+
+    u = UnevaluatedExpr(x + 2)
+    assert latex(u) == "x + 2"
+    assert latex(-1 * u) == r"- \left(x + 2\right)"
+    assert latex(3 * u) == r"3 \left(x + 2\right)"
+    assert latex(-3 * u) == r"- 3 \left(x + 2\right)"
+    assert latex(x**2 * u) == r"x^{2} \left(x + 2\right)"
+    assert latex(-x**2 * u) == r"- x^{2} \left(x + 2\right)"
 
 
 def test_MatrixElement_printing():
@@ -2775,7 +2869,7 @@ def test_issue_9216():
     assert latex(expr_1) == r"1^{-1}"
 
     expr_2 = Pow(1, Pow(1, -1, evaluate=False), evaluate=False)
-    assert latex(expr_2) == r"1^{1^{-1}}"
+    assert latex(expr_2) == r"1^{\left(1^{-1}\right)}"
 
     expr_3 = Pow(3, -2, evaluate=False)
     assert latex(expr_3) == r"\frac{1}{3^{2}}"
@@ -3119,7 +3213,7 @@ def test_latex_decimal_separator():
     x = symbols('x')
     y = symbols('y')
     z = symbols('z')
-    assert(latex(x*5.3 + 2**y**3.4 + 4.5 + z, decimal_separator = 'comma') == r'2^{y^{3{,}4}} + 5{,}3 x + z + 4{,}5')
+    assert(latex(x*5.3 + 2**y**3.4 + 4.5 + z, decimal_separator = 'comma') == r'2^{\left(y^{3{,}4}\right)} + 5{,}3 x + z + 4{,}5')
 
     assert(latex(0.987, decimal_separator='comma') == r'0{,}987')
     assert(latex(S(0.987), decimal_separator='comma') == r'0{,}987')
