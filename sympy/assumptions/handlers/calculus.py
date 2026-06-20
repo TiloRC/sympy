@@ -262,6 +262,16 @@ def _(expr, assumptions):
     return False
 
 
+@PositiveInfinitePredicate.register(Mul)
+def _(expr, assumptions):
+    # A negative expression cannot be positive_infinite
+    if recursive_ask(Q.negative(expr), assumptions) is True:
+        return False
+    # A finite expression cannot be positive_infinite
+    if recursive_ask(Q.finite(expr), assumptions) is True:
+        return False
+
+
 # NegativeInfinitePredicate
 
 
@@ -273,3 +283,13 @@ def _(expr, assumptions):
 @NegativeInfinitePredicate.register_many(Infinity, ComplexInfinity)
 def _(expr, assumptions):
     return False
+
+
+@NegativeInfinitePredicate.register(Mul)
+def _(expr, assumptions):
+    # A positive expression cannot be negative_infinite
+    if recursive_ask(Q.positive(expr), assumptions) is True:
+        return False
+    # A finite expression cannot be negative_infinite
+    if recursive_ask(Q.finite(expr), assumptions) is True:
+        return False
