@@ -555,15 +555,23 @@ def ask(proposition, assumptions=True, context=global_assumptions):
     return res
 
 
-@cacheit
+_known_facts_matrices = None
+
+
 def _get_known_facts_matrices():
     """
     Build Boolean matrix representation of the predicate implication/rejection graph.
 
-    Returns (pred_list, pred_index, IMP, REJ) where IMP and REJ are lists of
-    ints used as bitsets: IMP[i] has bit j set iff predicate i implies predicate j,
-    and REJ[i] has bit j set iff predicate i rejects predicate j.
+    Returns (pred_index, IMP, REJ) where IMP and REJ are lists of ints used as
+    bitsets: IMP[i] has bit j set iff predicate i implies predicate j, and
+    REJ[i] has bit j set iff predicate i rejects predicate j.
+
+    Result is cached in a module-level variable to avoid @cacheit call overhead
+    on every ask() invocation.
     """
+    global _known_facts_matrices
+    if _known_facts_matrices is not None:
+        return _known_facts_matrices
     d = get_known_facts_dict()
     preds = sorted(d, key=lambda p: str(p))
     index = {p: i for i, p in enumerate(preds)}
@@ -576,7 +584,8 @@ def _get_known_facts_matrices():
             IMP[i] |= 1 << index[q]
         for q in rej:
             REJ[i] |= 1 << index[q]
-    return preds, index, IMP, REJ
+    _known_facts_matrices = (index, IMP, REJ)
+    return _known_facts_matrices
 
 
 def _ask_single_fact(key, local_facts):
@@ -637,15 +646,15 @@ def _ask_single_fact(key, local_facts):
     if not local_facts.clauses:
         return None
 
-    _, index, IMP, REJ = _get_known_facts_matrices()
+    index, IMP, REJ = _get_known_facts_matrices()
     if key not in index:
         return None
 
     kbit = 1 << index[key]
 
-    # Collect unit literals into bitvectors
-    pos = 0
-    neg = 0
+    # Collect unit literals into index lists (avoids bit-extraction later)
+    pos_idx = []
+    neg_idx = []
     for clause in local_facts.clauses:
         if len(clause) != 1:
             continue
@@ -654,42 +663,29 @@ def _ask_single_fact(key, local_facts):
         if i is None:
             continue
         if f.is_Not:
-            neg |= 1 << i
+            neg_idx.append(i)
         else:
-            pos |= 1 << i
+            pos_idx.append(i)
 
-    # BMLP-SMP: forward closure of positive assumptions
-    # IMP is already transitively closed so this converges in one pass,
-    # but we loop for robustness against future codegen changes.
-    closure = pos
-    while True:
-        nxt = closure
-        c = closure
-        while c:
-            b = c & -c
-            nxt |= IMP[b.bit_length() - 1]
-            c ^= b
-        if nxt == closure:
-            break
-        closure = nxt
+    # Single pass: closure and rejection together.
+    # IMP is already transitively closed, so OR-ing the rows of the directly
+    # asserted predicates gives the full closure in one pass (no fixpoint loop).
+    # REJ is closed under implication, so the same pass covers rejection too.
+    closure = rejected = 0
+    for i in pos_idx:
+        closure |= IMP[i]
+        rejected |= REJ[i]
 
-    # key is entailed by the closure
     if closure & kbit:
         return True
-
-    # something in the closure rejects key
-    rejected = 0
-    c = closure
-    while c:
-        b = c & -c
-        rejected |= REJ[b.bit_length() - 1]
-        c ^= b
     if rejected & kbit:
         return False
 
-    # key would imply something asserted false (modus tollens)
-    if neg & IMP[index[key]]:
-        return False
+    # Modus tollens: key implies something asserted false
+    key_imp = IMP[index[key]]
+    for i in neg_idx:
+        if key_imp & (1 << i):
+            return False
 
     return None
 

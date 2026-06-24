@@ -2597,7 +2597,7 @@ def test_ask_single_fact_matrix():
     assert _ask_single_fact(Q.even, local_facts) is False
 
     # --- RMS invariant: IMP is already transitively closed ---
-    _, _, IMP, _ = _get_known_facts_matrices()
+    _, IMP, _ = _get_known_facts_matrices()
     for i, row in enumerate(IMP):
         closure = row
         c = row
