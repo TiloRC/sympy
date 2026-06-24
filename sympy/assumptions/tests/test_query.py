@@ -2561,3 +2561,48 @@ def test_issue_28127():
     assert ask(Q.gt(y,x), Q.lt(x,y)) is True
     assert ask(Q.lt(y,x), Q.gt(x,y)) is True
     assert ask(Q.le(y,x), Q.ge(x,y)) is True
+
+
+def test_ask_single_fact_matrix():
+    from sympy.assumptions.ask import _ask_single_fact, _get_known_facts_matrices
+
+    # --- existing docstring cases ---
+    local_facts = CNF.from_prop(~Q.zero)
+    assert _ask_single_fact(Q.zero, local_facts) is False
+
+    local_facts = CNF.from_prop(~Q.even)
+    assert _ask_single_fact(Q.zero, local_facts) is False
+
+    local_facts = CNF.from_prop(Q.zero)
+    assert _ask_single_fact(Q.even, local_facts) is True
+
+    local_facts = CNF.from_prop(Q.odd)
+    assert _ask_single_fact(Q.even, local_facts) is False
+
+    # --- empty assumptions -> None ---
+    assert _ask_single_fact(Q.even, CNF()) is None
+
+    # --- unknown key (not in dict) -> None ---
+    assert _ask_single_fact(Q.is_true, CNF.from_prop(Q.zero)) is None
+
+    # --- joint closure: two positive unit facts that together close to key ---
+    # Q.positive implies Q.nonzero; Q.integer implies Q.algebraic.
+    # Q.prime implies Q.positive AND Q.integer, so Q.prime -> Q.algebraic.
+    local_facts = CNF.from_prop(Q.prime)
+    assert _ask_single_fact(Q.algebraic, local_facts) is True
+
+    # --- modus tollens via neg: key implies something asserted false ---
+    # Q.even implies Q.integer; if ~Q.integer then ~Q.even
+    local_facts = CNF.from_prop(~Q.integer)
+    assert _ask_single_fact(Q.even, local_facts) is False
+
+    # --- RMS invariant: IMP is already transitively closed ---
+    _, _, IMP, _ = _get_known_facts_matrices()
+    for i, row in enumerate(IMP):
+        closure = row
+        c = row
+        while c:
+            b = c & -c
+            closure |= IMP[b.bit_length() - 1]
+            c ^= b
+        assert closure == row, f"IMP row {i} is not transitively closed"

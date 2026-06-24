@@ -8,6 +8,7 @@ from sympy.core import sympify
 from sympy.core.kind import BooleanKind
 from sympy.core.relational import Eq, Ne, Gt, Lt, Ge, Le
 from sympy.logic.inference import satisfiable
+from sympy.core.cache import cacheit
 from sympy.utilities.decorator import memoize_property
 
 
@@ -554,9 +555,37 @@ def ask(proposition, assumptions=True, context=global_assumptions):
     return res
 
 
+@cacheit
+def _get_known_facts_matrices():
+    """
+    Build Boolean matrix representation of the predicate implication/rejection graph.
+
+    Returns (pred_list, pred_index, IMP, REJ) where IMP and REJ are lists of
+    ints used as bitsets: IMP[i] has bit j set iff predicate i implies predicate j,
+    and REJ[i] has bit j set iff predicate i rejects predicate j.
+    """
+    d = get_known_facts_dict()
+    preds = sorted(d, key=lambda p: str(p))
+    index = {p: i for i, p in enumerate(preds)}
+    n = len(preds)
+    IMP = [0] * n
+    REJ = [0] * n
+    for p, (imp, rej) in d.items():
+        i = index[p]
+        for q in imp:
+            IMP[i] |= 1 << index[q]
+        for q in rej:
+            REJ[i] |= 1 << index[q]
+    return preds, index, IMP, REJ
+
+
 def _ask_single_fact(key, local_facts):
     """
-    Determine whether the key is directly implied or refuted by any unit clause in local_facts.
+    Determine whether the key is implied or refuted by the unit clauses in local_facts.
+
+    Uses Boolean matrix closure (BMLP-SMP) over all unit-clause assumptions jointly,
+    rather than checking each clause independently. Non-unit clauses are skipped;
+    the full SAT solver handles those downstream.
 
     Parameters
     ==========
@@ -608,31 +637,59 @@ def _ask_single_fact(key, local_facts):
     if not local_facts.clauses:
         return None
 
-    known_facts_dict = get_known_facts_dict()
-    get_facts = lambda k: known_facts_dict.get(k, (set(), set()))
+    _, index, IMP, REJ = _get_known_facts_matrices()
+    if key not in index:
+        return None
 
+    kbit = 1 << index[key]
+
+    # Collect unit literals into bitvectors
+    pos = 0
+    neg = 0
     for clause in local_facts.clauses:
         if len(clause) != 1:
             continue
         (f,) = clause
-        pred, negated = f.arg, f.is_Not
+        i = index.get(f.arg)
+        if i is None:
+            continue
+        if f.is_Not:
+            neg |= 1 << i
+        else:
+            pos |= 1 << i
 
-        # Negative literal
-        key_req, _ = get_facts(key)
-        if negated and pred in key_req:
-            # If key implies pred and pred is false,
-            # then key must be false.
-            return False
+    # BMLP-SMP: forward closure of positive assumptions
+    # IMP is already transitively closed so this converges in one pass,
+    # but we loop for robustness against future codegen changes.
+    closure = pos
+    while True:
+        nxt = closure
+        c = closure
+        while c:
+            b = c & -c
+            nxt |= IMP[b.bit_length() - 1]
+            c ^= b
+        if nxt == closure:
+            break
+        closure = nxt
 
-        # Positive literal
-        if not negated:
-            req, rej = get_facts(pred)
-            if key in req:
-                # key is implied by pred
-                return True
-            if key in rej:
-                # ~key is implied by pred
-                return False
+    # key is entailed by the closure
+    if closure & kbit:
+        return True
+
+    # something in the closure rejects key
+    rejected = 0
+    c = closure
+    while c:
+        b = c & -c
+        rejected |= REJ[b.bit_length() - 1]
+        c ^= b
+    if rejected & kbit:
+        return False
+
+    # key would imply something asserted false (modus tollens)
+    if neg & IMP[index[key]]:
+        return False
 
     return None
 
