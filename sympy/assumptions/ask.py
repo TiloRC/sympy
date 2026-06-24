@@ -8,6 +8,7 @@ from sympy.core import sympify
 from sympy.core.kind import BooleanKind
 from sympy.core.relational import Eq, Ne, Gt, Lt, Ge, Le
 from sympy.logic.inference import satisfiable
+from sympy.core.cache import cacheit
 from sympy.utilities.decorator import memoize_property
 
 
@@ -554,9 +555,46 @@ def ask(proposition, assumptions=True, context=global_assumptions):
     return res
 
 
+_known_facts_matrices = None
+
+
+def _get_known_facts_matrices():
+    """
+    Build Boolean matrix representation of the predicate implication/rejection graph.
+
+    Returns (pred_index, IMP, REJ) where IMP and REJ are lists of ints used as
+    bitsets: IMP[i] has bit j set iff predicate i implies predicate j, and
+    REJ[i] has bit j set iff predicate i rejects predicate j.
+
+    Result is cached in a module-level variable to avoid @cacheit call overhead
+    on every ask() invocation.
+    """
+    global _known_facts_matrices
+    if _known_facts_matrices is not None:
+        return _known_facts_matrices
+    d = get_known_facts_dict()
+    preds = sorted(d, key=lambda p: str(p))
+    index = {p: i for i, p in enumerate(preds)}
+    n = len(preds)
+    IMP = [0] * n
+    REJ = [0] * n
+    for p, (imp, rej) in d.items():
+        i = index[p]
+        for q in imp:
+            IMP[i] |= 1 << index[q]
+        for q in rej:
+            REJ[i] |= 1 << index[q]
+    _known_facts_matrices = (index, IMP, REJ)
+    return _known_facts_matrices
+
+
 def _ask_single_fact(key, local_facts):
     """
-    Determine whether the key is directly implied or refuted by any unit clause in local_facts.
+    Determine whether the key is implied or refuted by the unit clauses in local_facts.
+
+    Uses Boolean matrix closure (BMLP-SMP) over all unit-clause assumptions jointly,
+    rather than checking each clause independently. Non-unit clauses are skipped;
+    the full SAT solver handles those downstream.
 
     Parameters
     ==========
@@ -608,31 +646,46 @@ def _ask_single_fact(key, local_facts):
     if not local_facts.clauses:
         return None
 
-    known_facts_dict = get_known_facts_dict()
-    get_facts = lambda k: known_facts_dict.get(k, (set(), set()))
+    index, IMP, REJ = _get_known_facts_matrices()
+    if key not in index:
+        return None
 
+    kbit = 1 << index[key]
+
+    # Collect unit literals into index lists (avoids bit-extraction later)
+    pos_idx = []
+    neg_idx = []
     for clause in local_facts.clauses:
         if len(clause) != 1:
             continue
         (f,) = clause
-        pred, negated = f.arg, f.is_Not
+        i = index.get(f.arg)
+        if i is None:
+            continue
+        if f.is_Not:
+            neg_idx.append(i)
+        else:
+            pos_idx.append(i)
 
-        # Negative literal
-        key_req, _ = get_facts(key)
-        if negated and pred in key_req:
-            # If key implies pred and pred is false,
-            # then key must be false.
+    # Single pass: closure and rejection together.
+    # IMP is already transitively closed, so OR-ing the rows of the directly
+    # asserted predicates gives the full closure in one pass (no fixpoint loop).
+    # REJ is closed under implication, so the same pass covers rejection too.
+    closure = rejected = 0
+    for i in pos_idx:
+        closure |= IMP[i]
+        rejected |= REJ[i]
+
+    if closure & kbit:
+        return True
+    if rejected & kbit:
+        return False
+
+    # Modus tollens: key implies something asserted false
+    key_imp = IMP[index[key]]
+    for i in neg_idx:
+        if key_imp & (1 << i):
             return False
-
-        # Positive literal
-        if not negated:
-            req, rej = get_facts(pred)
-            if key in req:
-                # key is implied by pred
-                return True
-            if key in rej:
-                # ~key is implied by pred
-                return False
 
     return None
 
