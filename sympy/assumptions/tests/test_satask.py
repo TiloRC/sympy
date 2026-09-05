@@ -8,7 +8,8 @@ from sympy.functions.elementary.complexes import Abs
 from sympy.logic.boolalg import Equivalent, Implies, Xor
 from sympy.matrices.expressions.matexpr import MatrixSymbol
 from sympy.assumptions.cnf import CNF, Literal
-from sympy.assumptions.satask import (ReasoningEngine, satask,
+from sympy.assumptions.reasoningengine import ReasoningEngine
+from sympy.assumptions.satask import (satask,
     extract_predargs, get_all_relevant_facts, get_relevant_clsfacts)
 from sympy.assumptions.sathandlers import class_fact_registry
 
