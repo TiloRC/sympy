@@ -78,40 +78,31 @@ def satask(proposition, assumptions=True, use_known_facts=True, iterations=oo,
 
 
 class ReasoningEngine:
-    # TODO: the proposition is fixed at construction because `SATSolver`
-    # cannot be given new variables once it exists, and a question brings new
-    # ones: the selector always, and any predicate of its own that the facts
-    # do not already carry. Once the solver can take them, building it moves
-    # into `__init__`, `_create_question` becomes public, and one engine
-    # answers several questions against facts propagated once. Only those two
-    # change: a question is named by the selector `_create_question` hands
-    # back, which is what `fixed` and `ask_question` already take.
 
     def __init__(self, factbase: EncodedCNF, prop: CNF, _prop: CNF) -> None:
-        # `_prop` is the negation of `prop`. Negating a CNF is not free, so
-        # the caller passes the one it has already built.
         if {0} in factbase.data:
             raise ValueError("Inconsistent assumptions")
 
-        # The facts are what an engine that could be asked again would keep.
         self._factbase = factbase
+
+        # TODO: Move solver initialization into `__init__` once the sat solver
+        # can be given new variables after initialization.
+        #
+        # `_create_question` primarily exists because of features I would like to add when the sat solver
+        # can be given new variables:
+        # - Create/answer multiple questions in the same reasoning engine. This would improve
+        #   performance when asking many related questions.
+        # - Ask compound questions -- questions that are composed of the subquestions and
+        #   optional additional assumptions.
+        # Though, I think it also makes the code more readable.
         self.selector: int = self._create_question(prop, _prop)
 
     def _create_question(self, prop: CNF, _prop: CNF) -> int:
-        # Asserting the selector returned activates `prop` and asserting its
-        # negation activates `_prop`; leaving it unassigned, which is how the
-        # facts are propagated, keeps both sides from saying anything. It is
-        # the whole of the question: the clauses it guards stay in the solver,
-        # so nothing about the question is kept here.
         guarded, selector = _encode_with_selector(prop, _prop, self._factbase)
         self._encoding = guarded.encoding
         self._solver = SATSolver(guarded.data, range(1, selector + 1),
                                  set(), guarded.symbols + [selector])
 
-        # Run `propogate()` on the assumptions. The guarded clauses say no
-        # more than `selector <-> prop`, which ties the selector to the
-        # predicates without constraining them, so what propagation fixes
-        # among the predicates is what the facts imply and nothing else.
         if self._solver.propagate() == IpasirStatus.UNSATISFIABLE:
             raise ValueError("Inconsistent assumptions")
 
@@ -125,34 +116,26 @@ class ReasoningEngine:
         return self.fixed(lit)
 
     def fixed(self, lit: int) -> bool | None:
-        # A selector is a literal like any other: each of the clauses guarding
-        # a side carries its guard with it, so falsifying a clause of one side
-        # leaves that guard behind as the unit ruling the side out, and
-        # propagation fixes the selector exactly when the facts decide the
-        # question. `SATSolver.fixed` answers at the root level only, so this
-        # raises once `ask_question` has searched.
         return {1: True, -1: False, 0: None}[self._solver.fixed(lit)]
 
     def ask_question(self, selector: int) -> bool | None:
-        # Continue on the propogated solver, just call solve() on it. Both
-        # sides rest on the facts, so a search that finds no model at all
-        # rules the question out without either side being asked about.
         # TODO: Run additional checks to see which combination of the
         # assumptions, global_assumptions, and relevant_facts are inconsistent.
         if self._solver.solve() == IpasirStatus.UNSATISFIABLE:
             raise ValueError("Inconsistent assumptions")
 
-        # The model settles the side it activated, so ask about the other one.
-        witnessed = self._solver.val(selector)
-        self._solver.assume(-witnessed)
-        other = self._solver.solve() == IpasirStatus.SATISFIABLE
+        # The selector literal will either be set to true or false in the model
+        # that `solve()` found. True means `prop` is satisfiable, false means `_prop` is satisfiable.
+        selector_state = self._solver.val(selector)
+        assert selector_state in (1, -1)
+        # Determine the satifsiability of the other state by assuming it and then solving.
+        self._solver.assume(-selector_state)
+        other_state_is_satisfiable = self._solver.solve() == IpasirStatus.SATISFIABLE
 
-        # One side is settled already, so the other having a model is the
-        # whole of what makes the question undecided.
-        if other:
+        if other_state_is_satisfiable:
             return None
-
-        return witnessed > 0
+        else:
+            return selector_state > 0
 
 
 def check_satisfiability(prop: CNF, _prop: CNF, factbase: EncodedCNF,
