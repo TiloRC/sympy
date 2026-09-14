@@ -6,6 +6,7 @@ from __future__ import annotations
 from sympy.core.singleton import S
 from sympy.core.symbol import Symbol
 from sympy.core.kind import NumberKind, UndefinedKind
+from sympy.assumptions.ask import Q
 from sympy.assumptions.ask_generated import get_all_known_matrix_facts, get_all_known_number_facts
 from sympy.assumptions.assume import AppliedPredicate
 from sympy.assumptions.sathandlers import class_fact_registry
@@ -83,7 +84,63 @@ def satask(proposition, assumptions=True, use_known_facts=True, iterations=oo,
         if res is not None:
             return res
 
-    return engine.ask_query(query_literal)
+    res = engine.ask_query(query_literal)
+    if res is not None:
+        return res
+
+    return _lra_satask(engine, props, assumptions)
+
+
+def _lra_satask(engine, props, assumptions):
+    exprs = set()
+    for cnf in (*props, *assumptions):
+        for pred in cnf.all_predicates():
+            if isinstance(pred, AppliedPredicate):
+                exprs.update(pred.arguments)
+
+    encoding = engine._factbase.encoding
+    known_real_exprs = set()
+    for expr in exprs:
+        is_real = engine.lookup(Q.real(expr))
+        if is_real:
+            known_real_exprs.add(expr)
+
+    for expr in exprs:
+        if getattr(expr, "is_real", None):
+            known_real_exprs.add(expr)
+
+    if known_real_exprs != exprs:
+        return None
+
+    # have AI finish the rest
+
+
+
+
+def _lra_satask(prop, _prop, assumptions, exprs, root_real):
+    """Decide *prop* with the LRA theory solver, or return ``None`` if the
+    input turns out to be one that it cannot handle after all.
+
+    The theory solver is only sound on real expressions, so every expression
+    of *exprs* has to be real. What the root level left open in *root_real*
+    is asked of the old assumptions here, where the answer is needed.
+    """
+    known_real = root_real | {expr for expr in exprs if expr not in root_real
+                              and getattr(expr, "is_real", None) is True}
+    if known_real != exprs:
+        return None
+
+    from sympy.assumptions.lra_satask import check_satisfiability
+    from sympy.logic.algorithms.lra_theory import UnhandledInput
+
+    encoded_assumptions = EncodedCNF()
+    encoded_assumptions.from_cnf(assumptions)
+
+    try:
+        return check_satisfiability(prop, _prop, encoded_assumptions,
+                                    known_real=known_real)
+    except UnhandledInput:
+        return None
 
 
 def extract_predargs(proposition, assumptions=None):
