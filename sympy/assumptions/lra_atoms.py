@@ -1,9 +1,10 @@
 """Interpretation of predicates as linear arithmetic atoms.
 
 This module translates binary relation predicates into
-:class:`LRAConstraint` objects, validates them, and guarantees that every
-coefficient and constant is rational. It is the single place where the
-input of the linear arithmetic solver in
+:class:`LRAConstraint` objects and validates them: the normalized
+constant and the coefficients of multi-term constraints are rational,
+and the direction coefficient is a nonzero real number. It is the single
+place where the input of the linear arithmetic solver in
 :mod:`sympy.logic.algorithms.lra_theory` is interpreted; the solver itself
 only assembles its tableau from the constraint objects defined here.
 
@@ -11,6 +12,8 @@ The module deliberately imports nothing from :mod:`sympy.logic` so that it
 can be imported from anywhere in :mod:`sympy.assumptions`.
 """
 from __future__ import annotations
+from dataclasses import dataclass, field
+from typing import TYPE_CHECKING
 from sympy.core.add import Add
 from sympy.core.mul import Mul
 from sympy.core.numbers import Rational, oo
@@ -22,6 +25,9 @@ from sympy.assumptions import Predicate
 from sympy.assumptions.assume import AppliedPredicate
 from sympy.assumptions.ask import Q
 from sympy.utilities.iterables import sift
+
+if TYPE_CHECKING:
+    from sympy.core.expr import Expr
 
 
 class UnhandledInput(Exception):
@@ -35,6 +41,7 @@ class UnhandledInput(Exception):
 ALLOWED_PRED = {Q.eq: Eq, Q.gt: Gt, Q.lt: Lt, Q.le: Le, Q.ge: Ge}
 
 
+@dataclass(frozen=True, repr=False, eq=False)
 class LRAConstraint:
     """
     An atom of linear real arithmetic: a comparison of a linear expression
@@ -52,9 +59,13 @@ class LRAConstraint:
     - ``equality`` and ``strict`` tell whether the comparison is an
       equation and whether an inequality is strict.
 
-    Every coefficient and ``const`` is a ``Rational``; construction raises
-    ``UnhandledInput`` otherwise. Instances compare structurally by their
-    predicate and can be used as keys of an ``EncodedCNF``.
+    Construction raises ``UnhandledInput`` unless ``const`` is a
+    ``Rational``, every coefficient of a multi-term constraint is a
+    ``Rational``, and ``var_coeff`` is a nonzero real number. The
+    magnitude of a single-term constraint is folded into ``var_coeff``,
+    which therefore need not be rational. Instances are immutable,
+    compare structurally by their predicate and can be used as keys of an
+    ``EncodedCNF``.
 
     Example
     =======
@@ -71,13 +82,19 @@ class LRAConstraint:
     (-2, 0, False, True)
     """
 
-    def __init__(self, function, lhs, rhs):
-        assert function in ALLOWED_PRED
-        self.function = function
-        self.lhs = lhs
-        self.rhs = rhs
-        expr = lhs - rhs
-        if function in (Q.ge, Q.gt):
+    function: Predicate
+    lhs: Expr
+    rhs: Expr
+    terms: tuple[tuple[Expr, Rational], ...] = field(init=False)
+    var_coeff: Expr = field(init=False)
+    const: Rational = field(init=False)
+    equality: bool = field(init=False)
+    strict: bool = field(init=False)
+
+    def __post_init__(self):
+        assert self.function in ALLOWED_PRED
+        expr = self.lhs - self.rhs
+        if self.function in (Q.ge, Q.gt):
             expr = -expr
         vars, const = _sep_const_terms(expr)
         vars, var_coeff = _sep_const_coeff(vars)
@@ -86,17 +103,23 @@ class LRAConstraint:
         for term in Add.make_args(vars):
             term, coeff = _sep_const_coeff(term)
             assert len(term.free_symbols) > 0
-            if not isinstance(coeff, Rational):
-                raise UnhandledInput("Non-rational numbers are not handled")
             terms.append((term, coeff))
         assert var_coeff != 0
+        if var_coeff.is_real is not True:
+            raise UnhandledInput(
+                f"{var_coeff} is not a real direction coefficient")
         if not isinstance(const, Rational):
             raise UnhandledInput("Non-rational numbers are not handled")
-        self.terms = tuple(terms)
-        self.var_coeff = var_coeff
-        self.const = const
-        self.equality = function == Q.eq
-        self.strict = function in (Q.gt, Q.lt)
+        if len(terms) > 1 and any(not isinstance(coeff, Rational)
+                                  for _, coeff in terms):
+            raise UnhandledInput("Non-rational numbers are not handled")
+        for name, value in (
+                ("terms", tuple(terms)),
+                ("var_coeff", var_coeff),
+                ("const", const),
+                ("equality", self.function == Q.eq),
+                ("strict", self.function in (Q.gt, Q.lt))):
+            object.__setattr__(self, name, value)
 
     def __repr__(self):
         return f"{self.function}({self.lhs}, {self.rhs})"
@@ -200,11 +223,8 @@ def translate_lra_atoms(encoded_cnf, testing_mode=False):
 
         conflicts.append([atom_id if value == True else -atom_id])
 
-    variables = []
-    for constraint in constraints.values():
-        for term, _ in constraint.terms:
-            if term not in variables:
-                variables.append(term)
+    variables = dict.fromkeys(term for constraint in constraints.values()
+                              for term, _ in constraint.terms)
     fs = [v.free_symbols for v in variables]
     assert all(len(syms) > 0 for syms in fs)
     fs_count = sum(len(syms) for syms in fs)
