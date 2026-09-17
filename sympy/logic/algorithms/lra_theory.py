@@ -113,13 +113,7 @@ References
        https://link.springer.com/chapter/10.1007/11817963_11
 """
 from __future__ import annotations
-from sympy.assumptions.lra_atoms import (
-    UnhandledInput as UnhandledInput,
-    ALLOWED_PRED as ALLOWED_PRED,
-    _sep_const_coeff as _sep_const_coeff,
-    _sep_const_terms as _sep_const_terms,
-    translate_lra_atoms,
-)
+from sympy.assumptions.lra_preprocess import translate_lra_atoms
 from sympy.solvers.solveset import linear_eq_to_matrix
 from sympy.matrices.dense import eye
 from sympy.core import Dummy

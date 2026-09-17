@@ -12,8 +12,9 @@ from sympy.assumptions.cnf import CNF, EncodedCNF
 from sympy.functions.elementary.trigonometric import cos
 from sympy.external import import_module
 
-from sympy.logic.algorithms.lra_theory import LRASolver, UnhandledInput, LRARational, HANDLE_NEGATION, \
-    _sep_const_terms, _sep_const_coeff
+from sympy.logic.algorithms.lra_theory import LRASolver, LRARational, HANDLE_NEGATION
+from sympy.assumptions.lra_preprocess import (
+    UnhandledInput, _sep_const_terms, _sep_const_coeff)
 from sympy.core.random import random, choice, randint
 from sympy.core.sympify import sympify
 from sympy.ntheory.generate import randprime

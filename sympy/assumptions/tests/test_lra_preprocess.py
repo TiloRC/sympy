@@ -1,6 +1,8 @@
 from __future__ import annotations
 from sympy import I, Q, S, sqrt, symbols
-from sympy.assumptions.lra_atoms import LRAConstraint, UnhandledInput
+from sympy.assumptions.cnf import CNF, EncodedCNF
+from sympy.assumptions.lra_preprocess import (
+    LRAConstraint, UnhandledInput, pred_to_lra_atom, translate_lra_atoms)
 from sympy.testing.pytest import raises
 
 
@@ -15,6 +17,7 @@ def test_LRAConstraint_frozen():
     raises(AttributeError, lambda: setattr(c, "const", S.One))
     raises(AttributeError, lambda: setattr(c, "equality", True))
     raises(AttributeError, lambda: setattr(c, "strict", False))
+    raises(AttributeError, lambda: delattr(c, "terms"))
 
 
 def test_LRAConstraint_equality_and_hashing():
@@ -58,3 +61,42 @@ def test_LRAConstraint_irrational_direction():
     assert not c.equality and c.strict
     raises(UnhandledInput,
            lambda: LRAConstraint(Q.gt, sqrt(2)*x + y, S.Zero))
+
+
+def test_translate_lra_atoms_raw_and_pretranslated():
+    x, y = symbols("x y", real=True)
+    enc = EncodedCNF()
+    enc.from_cnf(CNF.from_prop(Q.gt(x, 0) | Q.gt(y, 1)))
+    pretranslated = pred_to_lra_atom(Q.ge(x, 1))
+    enc.encoding[pretranslated] = len(enc.encoding) + 1
+    constraints, conflicts = translate_lra_atoms(enc)
+    assert not conflicts
+    assert constraints[len(enc.encoding)] == pretranslated
+    assert set(map(str, constraints.values())) == {
+        "Q.gt(x, 0)", "Q.gt(y, 1)", "Q.ge(x, 1)"}
+
+
+def test_translate_lra_atoms_constants():
+    x = symbols("x", real=True)
+    enc = EncodedCNF()
+    enc.from_cnf(CNF.from_prop(Q.gt(x, 0) & Q.gt(2, 1) & Q.gt(1, 2)))
+    constraints, conflicts = translate_lra_atoms(enc, testing_mode=True)
+    assert sorted(map(str, constraints.values())) == ["Q.gt(x, 0)"]
+    true_id = enc.encoding[Q.gt(2, 1)]
+    false_id = enc.encoding[Q.gt(1, 2)]
+    assert sorted(conflicts) == [[-false_id], [true_id]]
+
+
+def test_translate_lra_atoms_unsupported():
+    x = symbols("x", real=True)
+    enc = EncodedCNF()
+    enc.from_cnf(CNF.from_prop(Q.gt(x, 0)))
+    enc.encoding[x] = len(enc.encoding) + 1
+    raises(ValueError, lambda: translate_lra_atoms(enc))
+
+
+def test_translate_lra_atoms_nonlinear():
+    x, y = symbols("x y", real=True)
+    enc = EncodedCNF()
+    enc.from_cnf(CNF.from_prop(Q.gt(x, 0) & Q.gt(x*y, 0)))
+    raises(UnhandledInput, lambda: translate_lra_atoms(enc))

@@ -1,6 +1,6 @@
 from __future__ import annotations
 from sympy.assumptions.lra_satask import lra_satask
-from sympy.logic.algorithms.lra_theory import UnhandledInput
+from sympy.assumptions.lra_preprocess import UnhandledInput
 from sympy.assumptions.ask import Q, ask
 
 from sympy.core import symbols, Symbol
