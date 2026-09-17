@@ -79,22 +79,15 @@ def _preprocess(cnf, replacements):
     becomes a false literal so that the contradiction survives encoding.
     """
     clauses = set()
+    true = Literal(S.true)
+    false = Literal(S.false)
     for clause in cnf.clauses:
-        new_clause = set()
-        satisfied = False
-        for lit in clause:
-            for new_lit in _rewrite_literal(lit, replacements[lit.lit]):
-                if new_lit.lit == S.true:
-                    satisfied = True
-                    break
-                if new_lit.lit != S.false:
-                    new_clause.add(new_lit)
-            if satisfied:
-                break
-        if not satisfied:
-            if not new_clause:
-                new_clause.add(Literal(S.false))
-            clauses.add(frozenset(new_clause))
+        new_clause = {new_lit for lit in clause
+                      for new_lit in _rewrite_literal(lit, replacements[lit.lit])}
+        if true in new_clause:
+            continue
+        new_clause.discard(false)
+        clauses.add(frozenset(new_clause or {false}))
     return CNF(clauses)
 
 

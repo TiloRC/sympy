@@ -233,71 +233,17 @@ class LRASolver():
         >>> conflicts #doctest: +SKIP
         [[4]]
         """
-        # This function has three main jobs:
-        # - raise errors if the input formula is not handled
-        # - preprocesses the formula into a matrix and single variable constraints
-        # - create one-literal conflict clauses from predicates that are always True
-        #   or always False such as Q.gt(3, 2)
-        #
-        # See the preprocessing section of "A Fast Linear-Arithmetic Solver for DPLL(T)"
-        # for an explanation of how the formula is converted into a matrix
-        # and a set of single variable constraints.
-
+        constraints, conflicts = _preprocess_relations(encoded_cnf, testing_mode)
         atom_id_to_boundaries = {}
         A = []
 
         basic = []
-        s_count = 0
         s_subs = {}
         nonbasic = []
         atom_vars = set()
-
-        if testing_mode:
-            # sort to reduce nondeterminism
-            encoded_cnf_items = sorted(encoded_cnf.encoding.items(),
-                                       key=lambda x: str(x))
-        else:
-            encoded_cnf_items = encoded_cnf.encoding.items()
-
-        empty_var = Dummy()
         var_to_lra_var = {}
-        conflicts = []
 
-        for prop, atom_id in encoded_cnf_items:
-            if isinstance(prop, Predicate):
-                prop = prop(empty_var)
-            if not isinstance(prop, AppliedPredicate):
-                if prop == True:
-                    conflicts.append([atom_id])
-                    continue
-                if prop == False:
-                    conflicts.append([-atom_id])
-                    continue
-
-                raise ValueError(f"Unhandled Predicate: {prop}")
-
-            assert prop.function in ALLOWED_PRED
-            if prop.lhs == S.NaN or prop.rhs == S.NaN:
-                raise ValueError(f"{prop} contains nan")
-            if prop.lhs.is_imaginary or prop.rhs.is_imaginary:
-                raise UnhandledInput(f"{prop} contains an imaginary component")
-            if prop.lhs == oo or prop.rhs == oo:
-                raise UnhandledInput(f"{prop} contains infinity")
-
-            expr = prop.lhs - prop.rhs
-            pred = ALLOWED_PRED[prop.function](expr, S.Zero)
-            if pred == True:
-                conflicts.append([atom_id])
-                continue
-            if pred == False:
-                conflicts.append([-atom_id])
-                continue
-            if not expr.free_symbols:
-                raise UnhandledInput(f"{prop} could not be simplified")
-
-            if prop.function in [Q.ge, Q.gt]:
-                expr = -expr
-
+        for atom_id, (expr, equality, strict) in constraints.items():
             # Example: 2x + 3y, 2 <- _sep_const_terms(2x + 3y + 2)
             vars, const = _sep_const_terms(expr)
             # Examples:
@@ -316,8 +262,7 @@ class LRASolver():
 
             if len(terms) > 1:
                 if vars not in s_subs:
-                    s_count += 1
-                    d = Dummy(f"s{s_count}")
+                    d = Dummy(f"s{len(s_subs) + 1}")
                     var_to_lra_var[d] = LRAVariable(d)
                     basic.append(d)
                     s_subs[vars] = d
@@ -330,8 +275,6 @@ class LRASolver():
 
             assert var_coeff != 0
 
-            equality = prop.function == Q.eq
-            strict = prop.function in [Q.gt, Q.lt]
             if equality:
                 b1 = Boundary(var_to_lra_var[var], -const, True, False)  # x <= c
                 b2 = Boundary(var_to_lra_var[var], -const, False, False) # x >= c
@@ -670,6 +613,53 @@ class LRASolver():
         while self.bound_history[-1].updates:
             self.backtrack()
         self.bound_history.pop()
+
+def _preprocess_relations(encoded_cnf, testing_mode=False):
+    """Validate relations and separate constant facts from arithmetic constraints.
+
+    Return a mapping from atom IDs to ``(expression, equality, strict)`` tuples and
+    unit clauses fixing constant atoms. Each expression is compared with zero;
+    greater-than relations are reversed so inequalities give upper bounds.
+    Symbols need not have real assumptions: they represent real variables here.
+    """
+    items = encoded_cnf.encoding.items()
+    if testing_mode:
+        items = sorted(items, key=lambda item: str(item))
+
+    constraints = {}
+    conflicts = []
+    empty_var = Dummy()
+    for prop, atom_id in items:
+        if isinstance(prop, Predicate):
+            prop = prop(empty_var)
+        if isinstance(prop, AppliedPredicate):
+            assert prop.function in ALLOWED_PRED
+            if prop.lhs == S.NaN or prop.rhs == S.NaN:
+                raise ValueError(f"{prop} contains nan")
+            if prop.lhs.is_imaginary or prop.rhs.is_imaginary:
+                raise UnhandledInput(f"{prop} contains an imaginary component")
+            if prop.lhs == oo or prop.rhs == oo:
+                raise UnhandledInput(f"{prop} contains infinity")
+
+            expr = prop.lhs - prop.rhs
+            value = ALLOWED_PRED[prop.function](expr, S.Zero)
+            if value not in (True, False):
+                if not expr.free_symbols:
+                    raise UnhandledInput(f"{prop} could not be simplified")
+                if prop.function in (Q.ge, Q.gt):
+                    expr = -expr
+                constraints[atom_id] = (expr, prop.function == Q.eq,
+                                       prop.function in (Q.gt, Q.lt))
+                continue
+        else:
+            value = prop
+            if value not in (True, False):
+                raise ValueError(f"Unhandled Predicate: {prop}")
+
+        conflicts.append([atom_id if value == True else -atom_id])
+
+    return constraints, conflicts
+
 
 def _sep_const_coeff(expr):
     """
