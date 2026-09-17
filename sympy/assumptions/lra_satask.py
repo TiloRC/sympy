@@ -28,13 +28,25 @@ def lra_satask(proposition, assumptions=True):
 
     return check_satisfiability(props, _props, assumptions)
 
+_SIGN_TO_BINREL = {
+    Q.positive: Q.gt,
+    Q.negative: Q.lt,
+    Q.zero: Q.eq,
+    Q.nonzero: Q.ne,
+    Q.nonpositive: Q.le,
+    Q.nonnegative: Q.ge,
+    Q.extended_positive: Q.gt,
+    Q.extended_negative: Q.lt,
+    Q.extended_nonpositive: Q.le,
+    Q.extended_nonzero: Q.ne,
+}
+
+_INFINITE_PREDICATES = {Q.negative_infinite, Q.positive_infinite}
+
 # Some predicates such as Q.prime can't be handled by lra_satask.
 # For example, (x > 0) & (x < 1) & Q.prime(x) is unsat but lra_satask would think it was sat.
 # WHITE_LIST is a list of predicates that can always be handled.
-WHITE_LIST = ALLOWED_PRED.keys() | {Q.positive, Q.negative, Q.zero, Q.nonzero, Q.nonpositive, Q.nonnegative,
-                                    Q.extended_positive, Q.extended_negative, Q.extended_nonpositive,
-                                    Q.extended_negative, Q.extended_nonzero, Q.negative_infinite,
-                                    Q.positive_infinite}
+WHITE_LIST = ALLOWED_PRED.keys() | _SIGN_TO_BINREL.keys() | _INFINITE_PREDICATES
 
 # Predicates that every real expression satisfies. Nothing reaches the theory
 # solver unless all of its expressions are real, so these say nothing that is
@@ -50,10 +62,8 @@ def check_satisfiability(prop, _prop, factbase, known_real=frozenset()):
     other than their old assumptions, such as the root level inference that
     ``satask`` does before handing over to this solver.
     """
-    all_facts = factbase.copy()
-    all_facts.add_from_cnf(prop)
-    all_facts.add_from_cnf(_prop)
-    all_pred, all_exprs = get_all_pred_and_expr_from_enc_cnf(all_facts)
+    predicates = factbase.encoding.keys() | prop.all_predicates() | _prop.all_predicates()
+    all_pred, all_exprs = _get_all_pred_and_expr(predicates)
 
     trivially_true = set()
     for pred in all_pred:
@@ -129,41 +139,17 @@ def _pred_to_binrel(pred):
     if not isinstance(pred, AppliedPredicate):
         return pred
 
-    if pred.function in pred_to_pos_neg_zero:
-        f = pred_to_pos_neg_zero[pred.function]
-        if f is False:
-            return False
-        pred = f(pred.arguments[0])
-
-    if pred.function == Q.positive:
-        pred = Q.gt(pred.arguments[0], 0)
-    elif pred.function == Q.negative:
-        pred = Q.lt(pred.arguments[0], 0)
-    elif pred.function == Q.zero:
-        pred = Q.eq(pred.arguments[0], 0)
-    elif pred.function == Q.nonpositive:
-        pred = Q.le(pred.arguments[0], 0)
-    elif pred.function == Q.nonnegative:
-        pred = Q.ge(pred.arguments[0], 0)
-    elif pred.function == Q.nonzero:
-        pred = Q.ne(pred.arguments[0], 0)
-
+    if pred.function in _INFINITE_PREDICATES:
+        return False
+    if pred.function in _SIGN_TO_BINREL:
+        return _SIGN_TO_BINREL[pred.function](pred.arguments[0], 0)
     return pred
 
-pred_to_pos_neg_zero = {
-    Q.extended_positive: Q.positive,
-    Q.extended_negative: Q.negative,
-    Q.extended_nonpositive: Q.nonpositive,
-    Q.extended_negative: Q.negative,
-    Q.extended_nonzero: Q.nonzero,
-    Q.negative_infinite: False,
-    Q.positive_infinite: False
-}
 
-def get_all_pred_and_expr_from_enc_cnf(enc_cnf):
+def _get_all_pred_and_expr(predicates):
     all_exprs = set()
     all_pred = set()
-    for pred in enc_cnf.encoding.keys():
+    for pred in predicates:
         if isinstance(pred, AppliedPredicate):
             all_pred.add(pred)
             all_exprs.update(pred.arguments)
