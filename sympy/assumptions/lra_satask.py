@@ -53,12 +53,13 @@ def check_satisfiability(prop, _prop, factbase):
         factbase.add(pred)
         replacements[pred] = _pred_to_binrel(pred)
 
+    atom_cache = {}
     encoded = EncodedCNF()
-    encoded.from_cnf(_preprocess(factbase, replacements))
+    encoded.from_cnf(_preprocess(factbase, replacements, atom_cache))
     sat_true = encoded.copy()
     sat_false = encoded.copy()
-    sat_true.add_from_cnf(_preprocess(prop, replacements))
-    sat_false.add_from_cnf(_preprocess(_prop, replacements))
+    sat_true.add_from_cnf(_preprocess(prop, replacements, atom_cache))
+    sat_false.add_from_cnf(_preprocess(_prop, replacements, atom_cache))
 
     can_be_true = satisfiable(sat_true, use_lra_theory=True) is not False
     can_be_false = satisfiable(sat_false, use_lra_theory=True) is not False
@@ -72,19 +73,22 @@ def check_satisfiability(prop, _prop, factbase):
     raise ValueError("Inconsistent assumptions")
 
 
-def _preprocess(cnf, replacements):
+def _preprocess(cnf, replacements, atom_cache=None):
     """Rewrite CNF literals to LRA relations, simplifying constant literals.
 
     Clauses containing a true literal are dropped and false literals are
     removed from their clauses. A clause whose literals are all false
     becomes a false literal so that the contradiction survives encoding.
     """
+    if atom_cache is None:
+        atom_cache = {}
     clauses = set()
     true = Literal(S.true)
     false = Literal(S.false)
     for clause in cnf.clauses:
         new_clause = {new_lit for lit in clause
-                      for new_lit in _rewrite_literal(lit, replacements[lit.lit])}
+                      for new_lit in _rewrite_literal(lit, replacements[lit.lit],
+                                                      atom_cache)}
         if true in new_clause:
             continue
         new_clause.discard(false)
@@ -92,33 +96,39 @@ def _preprocess(cnf, replacements):
     return CNF(clauses)
 
 
-def _rewrite_literal(literal, pred):
+def _rewrite_literal(literal, pred, atom_cache):
     """Return the disjunction representing a converted literal for LRA.
 
-    The converted literal wraps an ``LRAConstraint`` so that the encoded
-    CNF carries interpreted atoms; predicates that simplify to a constant
-    are folded to ``S.true``/``S.false`` with the polarity of the literal.
+    An equality is kept as is, a disequality is replaced by its two strict
+    comparisons, and any other comparison is kept unchanged; the rewritten
+    comparisons carry positive polarity while any other literal keeps its
+    polarity. One common conversion path turns the comparisons into
+    ``LRAConstraint`` atoms or folds them to ``S.true``/``S.false``, using
+    ``atom_cache`` to convert each predicate only once. Clause-level
+    elimination of constant literals is left to ``_preprocess``.
     """
     negated = literal.is_Not
     if isinstance(pred, AppliedPredicate) and pred.function in (Q.eq, Q.ne):
         if (pred.function == Q.ne) != negated:
-            atoms = [pred_to_lra_atom(rel(*pred.arguments))
-                     for rel in (Q.gt, Q.lt)]
-            if any(atom is S.true for atom in atoms):
-                return (Literal(S.true),)
-            atoms = [atom for atom in atoms if atom is not S.false]
-            if not atoms:
-                return (Literal(S.false),)
-            return tuple(Literal(atom) for atom in atoms)
-        atom = pred_to_lra_atom(Q.eq(*pred.arguments))
-        if atom in (True, False):
-            return (Literal(S.true if bool(atom) else S.false),)
-        return (Literal(atom),)
+            comparisons = (Q.gt(*pred.arguments), Q.lt(*pred.arguments))
+        else:
+            comparisons = (Q.eq(*pred.arguments),)
+        negated = False
+    else:
+        comparisons = (pred,)
+    return tuple(_comparison_literal(comparison, negated, atom_cache)
+                 for comparison in comparisons)
+
+
+def _comparison_literal(pred, negated, atom_cache):
+    """Convert *pred* to an ``LRAConstraint`` atom literal with *negated* polarity."""
     if pred not in (True, False):
-        pred = pred_to_lra_atom(pred)
+        if pred not in atom_cache:
+            atom_cache[pred] = pred_to_lra_atom(pred)
+        pred = atom_cache[pred]
     if pred in (True, False):
-        return (Literal(S.true if bool(pred) != negated else S.false),)
-    return (Literal(pred, negated),)
+        return Literal(S.true if bool(pred) != negated else S.false)
+    return Literal(pred, negated)
 
 
 def _pred_to_binrel(pred):
