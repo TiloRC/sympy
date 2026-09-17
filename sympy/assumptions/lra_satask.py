@@ -2,7 +2,8 @@ from __future__ import annotations
 from sympy.assumptions.cnf import CNF, EncodedCNF, Literal
 from sympy.assumptions.ask import Q
 from sympy.logic.inference import satisfiable
-from sympy.logic.algorithms.lra_theory import UnhandledInput, ALLOWED_PRED
+from sympy.assumptions.lra_atoms import (ALLOWED_PRED, UnhandledInput,
+                                         pred_to_lra_atom)
 from sympy.matrices.kind import MatrixKind
 from sympy.core.kind import NumberKind
 from sympy.assumptions.assume import AppliedPredicate
@@ -92,14 +93,31 @@ def _preprocess(cnf, replacements):
 
 
 def _rewrite_literal(literal, pred):
-    """Return the disjunction representing a converted literal for LRA."""
+    """Return the disjunction representing a converted literal for LRA.
+
+    The converted literal wraps an ``LRAConstraint`` so that the encoded
+    CNF carries interpreted atoms; predicates that simplify to a constant
+    are folded to ``S.true``/``S.false`` with the polarity of the literal.
+    """
     negated = literal.is_Not
-    if pred in (True, False):
-        return (Literal(S.true if bool(pred) != negated else S.false),)
     if isinstance(pred, AppliedPredicate) and pred.function in (Q.eq, Q.ne):
         if (pred.function == Q.ne) != negated:
-            return (Literal(Q.gt(*pred.arguments)), Literal(Q.lt(*pred.arguments)))
-        return (Literal(Q.eq(*pred.arguments)),)
+            atoms = [pred_to_lra_atom(rel(*pred.arguments))
+                     for rel in (Q.gt, Q.lt)]
+            if any(atom is S.true for atom in atoms):
+                return (Literal(S.true),)
+            atoms = [atom for atom in atoms if atom is not S.false]
+            if not atoms:
+                return (Literal(S.false),)
+            return tuple(Literal(atom) for atom in atoms)
+        atom = pred_to_lra_atom(Q.eq(*pred.arguments))
+        if atom in (True, False):
+            return (Literal(S.true if bool(atom) else S.false),)
+        return (Literal(atom),)
+    if pred not in (True, False):
+        pred = pred_to_lra_atom(pred)
+    if pred in (True, False):
+        return (Literal(S.true if bool(pred) != negated else S.false),)
     return (Literal(pred, negated),)
 
 
