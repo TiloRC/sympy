@@ -13,6 +13,7 @@ The module deliberately imports nothing from :mod:`sympy.logic` so that
 it can be imported from anywhere in :mod:`sympy.assumptions`.
 """
 from __future__ import annotations
+from typing import Any, Iterable
 from sympy.core.add import Add
 from sympy.core.mul import Mul
 from sympy.core.numbers import Rational, oo
@@ -41,6 +42,14 @@ ALLOWED_PRED = {Q.eq: Eq, Q.gt: Gt, Q.lt: Lt, Q.le: Le, Q.ge: Ge}
 
 
 class LRAConstraint:
+    function: Any
+    lhs: Any
+    rhs: Any
+    terms: tuple[Any, ...]
+    var_coeff: Any
+    const: Any
+    equality: bool
+    strict: bool
     """
     An atom of linear real arithmetic: a comparison of a linear expression
     with zero.
@@ -80,7 +89,7 @@ class LRAConstraint:
     (-2, 0, False, True)
     """
 
-    def __init__(self, function, lhs, rhs):
+    def __init__(self, function: Any, lhs: Any, rhs: Any) -> None:
         assert function in ALLOWED_PRED
         expr = lhs - rhs
         if function in (Q.ge, Q.gt):
@@ -108,26 +117,26 @@ class LRAConstraint:
                 ("strict", function in (Q.gt, Q.lt))):
             object.__setattr__(self, name, value)
 
-    def __setattr__(self, name, value):
+    def __setattr__(self, name: str, value: Any) -> None:
         raise AttributeError(f"cannot assign to field {name!r}")
 
-    def __delattr__(self, name):
+    def __delattr__(self, name: str) -> None:
         raise AttributeError(f"cannot delete field {name!r}")
 
-    def __repr__(self):
+    def __repr__(self) -> str:
         return f"{self.function}({self.lhs}, {self.rhs})"
 
-    def __eq__(self, other):
+    def __eq__(self, other: object) -> bool:
         if not isinstance(other, LRAConstraint):
             return NotImplemented
         return ((self.function, self.lhs, self.rhs)
             == (other.function, other.lhs, other.rhs))
 
-    def __hash__(self):
+    def __hash__(self) -> int:
         return hash((self.function, self.lhs, self.rhs))
 
 
-def pred_to_lra_atom(pred):
+def pred_to_lra_atom(pred: Any) -> Any:
     """
     Convert an applied binary relation predicate into an
     :class:`LRAConstraint`, or into ``S.true``/``S.false`` when the
@@ -151,24 +160,27 @@ def pred_to_lra_atom(pred):
     """
     if not isinstance(pred, AppliedPredicate):
         return pred
-    assert pred.function in ALLOWED_PRED
-    if pred.lhs == S.NaN or pred.rhs == S.NaN:
-        raise ValueError(f"{pred} contains nan")
-    if pred.lhs.is_imaginary or pred.rhs.is_imaginary:
-        raise UnhandledInput(f"{pred} contains an imaginary component")
-    if pred.lhs == oo or pred.rhs == oo:
-        raise UnhandledInput(f"{pred} contains infinity")
+    apred: Any = pred
+    assert apred.function in ALLOWED_PRED
+    if apred.lhs == S.NaN or apred.rhs == S.NaN:
+        raise ValueError(f"{apred} contains nan")
+    if apred.lhs.is_imaginary or apred.rhs.is_imaginary:
+        raise UnhandledInput(f"{apred} contains an imaginary component")
+    if apred.lhs == oo or apred.rhs == oo:
+        raise UnhandledInput(f"{apred} contains infinity")
 
-    expr = pred.lhs - pred.rhs
-    value = ALLOWED_PRED[pred.function](expr, S.Zero)
+    expr = apred.lhs - apred.rhs
+    value = ALLOWED_PRED[apred.function](expr, S.Zero)
     if value not in (True, False):
         if not expr.free_symbols:
-            raise UnhandledInput(f"{pred} could not be simplified")
-        return LRAConstraint(pred.function, pred.lhs, pred.rhs)
+            raise UnhandledInput(f"{apred} could not be simplified")
+        return LRAConstraint(apred.function, apred.lhs, apred.rhs)
     return S.true if value == True else S.false
 
 
-def translate_lra_atoms(encoded_cnf, testing_mode=False):
+def translate_lra_atoms(encoded_cnf: EncodedCNF,
+                        testing_mode: bool = False
+                        ) -> tuple[dict[int, LRAConstraint], list[list[int]]]:
     """Validate the atoms of ``encoded_cnf`` and separate constant facts
     from arithmetic constraints.
 
@@ -225,7 +237,7 @@ def translate_lra_atoms(encoded_cnf, testing_mode=False):
     return constraints, conflicts
 
 
-def _sep_const_coeff(expr):
+def _sep_const_coeff(expr: Any) -> tuple[Any, Any]:
     """
     Example
     =======
@@ -245,7 +257,7 @@ def _sep_const_coeff(expr):
     return Mul(*var), Mul(*const)
 
 
-def _sep_const_terms(expr):
+def _sep_const_terms(expr: Any) -> tuple[Any, Any]:
     """
     Example
     =======
@@ -275,7 +287,8 @@ _SIGN_TO_BINREL = {
 }
 
 
-def prepare_lra_queries(prop, negated_prop, factbase):
+def prepare_lra_queries(prop: CNF, negated_prop: CNF,
+                        factbase: CNF) -> tuple[EncodedCNF, EncodedCNF]:
     """Rewrite and encode the CNFs of a query and its negation on top of
     a fact base for checking with the LRA theory solver.
 
@@ -306,7 +319,7 @@ def prepare_lra_queries(prop, negated_prop, factbase):
     return sat_true, sat_false
 
 
-def _preprocess(cnf, replacements):
+def _preprocess(cnf: CNF, replacements: dict[Any, Any]) -> CNF:
     """Rewrite CNF literals to LRA relations, simplifying constant literals.
 
     Clauses containing a true literal are dropped and false literals are
@@ -326,7 +339,7 @@ def _preprocess(cnf, replacements):
     return CNF(clauses)
 
 
-def _rewrite_literal(literal, pred):
+def _rewrite_literal(literal: Literal, pred: Any) -> tuple[Literal, ...]:
     """Return the disjunction representing a converted literal for LRA.
 
     An equality is kept as is, a disequality is replaced by its two strict
@@ -337,7 +350,8 @@ def _rewrite_literal(literal, pred):
     Clause-level elimination of constant literals is left to
     ``_preprocess``.
     """
-    negated = literal.is_Not
+    negated = getattr(literal, "is_Not")
+    comparisons: tuple[Any, ...]
     if isinstance(pred, AppliedPredicate) and pred.function in (Q.eq, Q.ne):
         if (pred.function == Q.ne) != negated:
             comparisons = (Q.gt(*pred.arguments), Q.lt(*pred.arguments))
@@ -350,7 +364,7 @@ def _rewrite_literal(literal, pred):
                  for comparison in comparisons)
 
 
-def _comparison_literal(pred, negated):
+def _comparison_literal(pred: Any, negated: bool) -> Literal:
     """Convert *pred* to an ``LRAConstraint`` atom literal with *negated* polarity."""
     if pred not in (True, False):
         pred = pred_to_lra_atom(pred)
@@ -359,7 +373,7 @@ def _comparison_literal(pred, negated):
     return Literal(pred, negated)
 
 
-def _pred_to_binrel(pred):
+def _pred_to_binrel(pred: Any) -> Any:
     """Validate a predicate and convert it to a relation or Boolean constant."""
     if not isinstance(pred, AppliedPredicate):
         return pred
@@ -373,7 +387,7 @@ def _pred_to_binrel(pred):
     raise UnhandledInput(f"LRASolver: {pred} is an unhandled predicate")
 
 
-def _validate_expression(expr):
+def _validate_expression(expr: Any) -> None:
     """Reject domains and expressions that real arithmetic cannot represent."""
     if getattr(expr, "kind", None) == MatrixKind(NumberKind):
         raise UnhandledInput(f"LRASolver: {expr} is of MatrixKind")
@@ -393,7 +407,7 @@ def _validate_expression(expr):
         raise UnhandledInput(f"LRASolver: {expr} is irational")
 
 
-def extract_pred_from_old_assum(all_exprs):
+def extract_pred_from_old_assum(all_exprs: Iterable[Any]) -> list[Any]:
     """
     Returns a list of relevant new assumption predicate
     based on any old assumptions.
