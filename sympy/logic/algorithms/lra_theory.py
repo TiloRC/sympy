@@ -114,6 +114,7 @@ References
 """
 from __future__ import annotations
 from sympy.assumptions.lra_preprocess import translate_lra_atoms
+from sympy.assumptions.ask import Q
 from sympy.solvers.solveset import linear_eq_to_matrix
 from sympy.matrices.dense import eye
 from sympy.core import Dummy
@@ -242,14 +243,21 @@ class LRASolver():
 
             atom_vars.add(var)
 
-            if constraint.equality:
-                b1 = Boundary(var_to_lra_var[var], -constraint.const, True, False)  # x <= c
-                b2 = Boundary(var_to_lra_var[var], -constraint.const, False, False) # x >= c
+            if len(constraint.terms) == 1:
+                coefficient = constraint.terms[0][1]
+                bound = constraint.bound / coefficient
+                upper = coefficient.is_positive
+            else:
+                bound = constraint.bound
+                upper = True
+
+            if constraint.relation == Q.eq:
+                b1 = Boundary(var_to_lra_var[var], bound, True, False)  # x <= c
+                b2 = Boundary(var_to_lra_var[var], bound, False, False) # x >= c
                 atom_id_to_boundaries[atom_id] = [b1, b2]
             else:
-                upper = constraint.var_coeff > 0
-                b = Boundary(var_to_lra_var[var], -constraint.const, upper,
-                             constraint.strict)
+                b = Boundary(var_to_lra_var[var], bound, upper,
+                             constraint.relation == Q.lt)
                 atom_id_to_boundaries[atom_id] = [b]
 
         A, _ = linear_eq_to_matrix(A, nonbasic + basic)

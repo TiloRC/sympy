@@ -38,6 +38,17 @@ def test_lra_satask():
     raises(UnhandledInput, lambda: lra_satask(Q.lt(X, 2) & Q.gt(X, 3)))
 
 
+def test_lra_normalized_bounds():
+    assert lra_satask(x > 2, -2*x < -4) is True
+    assert lra_satask(x > 2, -2*x <= -4) is None
+    assert lra_satask(x < 2, -2*x <= -4) is False
+    assert lra_satask(Q.eq(x, 2), Q.eq(-2*x, -4)) is True
+    assert lra_satask(~Q.eq(x, 2), Q.eq(-2*x, -4)) is False
+    assert lra_satask(x + 2*y > 3, -x - 2*y < -3) is True
+    assert lra_satask(x + 2*y > 3, -x - 2*y <= -3) is None
+    raises(ValueError, lambda: lra_satask(x > 0, (x > 2) & (-x >= -2)))
+
+
 def test_old_assumptions():
     # test unhandled old assumptions
     w = symbols("w")

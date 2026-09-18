@@ -41,37 +41,17 @@ class UnhandledInput(Exception):
 ALLOWED_PRED = {Q.eq: Eq, Q.gt: Gt, Q.lt: Lt, Q.le: Le, Q.ge: Ge}
 
 
-class LRAConstraint:
-    function: Any
-    lhs: Any
-    rhs: Any
-    terms: tuple[Any, ...]
-    var_coeff: Any
-    const: Any
-    equality: bool
-    strict: bool
+class LRAConstraint(tuple):
     """
-    An atom of linear real arithmetic: a comparison of a linear expression
-    with zero.
+    An immutable normalized linear real arithmetic atom.
 
-    ``function`` is one of ``Q.eq``, ``Q.gt``, ``Q.lt``, ``Q.ge``, ``Q.le``
-    and ``lhs``, ``rhs`` are the expressions it compares. The constructor
-    normalizes the comparison and stores what the solver consumes:
+    ``terms`` and ``bound`` represent ``sum(term*coefficient) <= bound``.
+    ``relation`` is ``Q.le`` or ``Q.lt`` for inequalities and ``Q.eq`` for
+    equalities. The tuple layout is ``(terms, relation, bound)``.
 
-    - ``terms`` is a tuple of ``(term, coefficient)`` pairs describing the
-      variable part, oriented so that ``Q.gt``/``Q.ge`` give upper bounds,
-    - ``var_coeff`` is the factor that was folded out of the variable part;
-      its sign gives the bound direction of the constraint,
-    - ``const`` is the normalized additive constant,
-    - ``equality`` and ``strict`` tell whether the comparison is an
-      equation and whether an inequality is strict.
-
-    Construction raises ``UnhandledInput`` unless ``const`` and the
-    coefficients of all normalized terms are ``Rational`` and
-    ``var_coeff`` is a nonzero real number. The magnitude of the variable
-    part of a single-term constraint is folded into ``var_coeff``, which
-    therefore need not be rational. Instances are immutable, compare
-    structurally by their predicate and can be used as keys of an
+    Construction raises ``UnhandledInput`` unless the normalized bound and
+    coefficients are rational and the direction coefficient is a nonzero
+    real number. Instances are compact and can be used as keys of an
     ``EncodedCNF``.
 
     Example
@@ -81,59 +61,55 @@ class LRAConstraint:
     >>> from sympy.assumptions.ask import Q
     >>> from sympy.abc import x
     >>> c = LRAConstraint(Q.gt, 2*x + 2, 2)
-    >>> c
-    Q.gt(2*x + 2, 2)
     >>> c.terms
-    ((x, 1),)
-    >>> c.var_coeff, c.const, c.equality, c.strict
-    (-2, 0, False, True)
+    ((x, -1),)
+    >>> c.relation, c.bound
+    (Q.lt, 0)
     """
+    __slots__ = ()
 
-    def __init__(self, function: Any, lhs: Any, rhs: Any) -> None:
+    def __new__(cls, function: Any, lhs: Any, rhs: Any) -> LRAConstraint:
         assert function in ALLOWED_PRED
         expr = lhs - rhs
         if function in (Q.ge, Q.gt):
             expr = -expr
         vars, const = _sep_const_terms(expr)
         vars, var_coeff = _sep_const_coeff(vars)
-        const = const / var_coeff
+        assert var_coeff != 0
+        if var_coeff.is_real is not True:
+            raise UnhandledInput(
+                f"{var_coeff} is not a real direction coefficient")
+        if var_coeff.is_negative is True:
+            vars = -vars
+            var_coeff = -var_coeff
+        elif var_coeff.is_positive is not True:
+            raise UnhandledInput(
+                f"{var_coeff} has an undetermined direction")
+        bound = -const / var_coeff
+        if not isinstance(bound, Rational):
+            raise UnhandledInput("Non-rational numbers are not handled")
         terms = []
         for term in Add.make_args(vars):
             term, coeff = _sep_const_coeff(term)
             assert len(term.free_symbols) > 0
             terms.append((term, coeff))
-        assert var_coeff != 0
-        if var_coeff.is_real is not True:
-            raise UnhandledInput(
-                f"{var_coeff} is not a real direction coefficient")
-        if not isinstance(const, Rational):
-            raise UnhandledInput("Non-rational numbers are not handled")
         if any(not isinstance(coeff, Rational) for _, coeff in terms):
             raise UnhandledInput("Non-rational numbers are not handled")
-        for name, value in (
-                ("function", function), ("lhs", lhs), ("rhs", rhs),
-                ("terms", tuple(terms)), ("var_coeff", var_coeff),
-                ("const", const), ("equality", function == Q.eq),
-                ("strict", function in (Q.gt, Q.lt))):
-            object.__setattr__(self, name, value)
+        relation = Q.eq if function == Q.eq else (Q.lt if function in (Q.gt, Q.lt)
+                                                   else Q.le)
+        return tuple.__new__(cls, (tuple(terms), relation, bound))
 
-    def __setattr__(self, name: str, value: Any) -> None:
-        raise AttributeError(f"cannot assign to field {name!r}")
+    @property
+    def terms(self) -> tuple[Any, ...]:
+        return self[0]
 
-    def __delattr__(self, name: str) -> None:
-        raise AttributeError(f"cannot delete field {name!r}")
+    @property
+    def relation(self) -> Any:
+        return self[1]
 
-    def __repr__(self) -> str:
-        return f"{self.function}({self.lhs}, {self.rhs})"
-
-    def __eq__(self, other: object) -> bool:
-        if not isinstance(other, LRAConstraint):
-            return NotImplemented
-        return ((self.function, self.lhs, self.rhs)
-            == (other.function, other.lhs, other.rhs))
-
-    def __hash__(self) -> int:
-        return hash((self.function, self.lhs, self.rhs))
+    @property
+    def bound(self) -> Rational:
+        return self[2]
 
 
 def pred_to_lra_atom(pred: Any) -> Any:
@@ -153,8 +129,8 @@ def pred_to_lra_atom(pred: Any) -> Any:
     >>> from sympy.assumptions.lra_preprocess import pred_to_lra_atom
     >>> from sympy.assumptions.ask import Q
     >>> from sympy.abc import x
-    >>> pred_to_lra_atom(Q.ge(x - 1, 0))
-    Q.ge(x - 1, 0)
+    >>> pred_to_lra_atom(Q.ge(x - 1, 0)).relation
+    Q.le
     >>> pred_to_lra_atom(Q.gt(2, 1))
     True
     """
@@ -202,8 +178,8 @@ def translate_lra_atoms(encoded_cnf: EncodedCNF,
     >>> enc = EncodedCNF()
     >>> enc.from_cnf(CNF.from_prop(Q.gt(x, 0) & Q.gt(2, 1)))
     >>> constraints, conflicts = translate_lra_atoms(enc)
-    >>> sorted(map(str, constraints.values()))
-    ['Q.gt(x, 0)']
+    >>> len(constraints)
+    1
     >>> len(conflicts)
     1
     """
