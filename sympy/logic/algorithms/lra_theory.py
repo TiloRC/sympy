@@ -593,12 +593,6 @@ _LRAConstraint = tuple[_LRATerms, Expr, bool, bool]
 
 
 def _evaluate_trivial_predicate(prop: Boolean) -> bool | None:
-    """
-    Return True or False if ``prop`` is a constant predicate, else None.
-
-    Raises ``ValueError`` for predicates LRA cannot handle and
-    ``UnhandledInput`` for predicates that cannot be simplified.
-    """
     if not isinstance(prop, AppliedPredicate):
         if prop == True:
             return True
@@ -630,11 +624,10 @@ def _evaluate_trivial_predicate(prop: Boolean) -> bool | None:
 
 def _constraint_from_predicate(prop: AppliedPredicate) -> _LRAConstraint:
     """
-    Extract a linear constraint from a non-trivial applied predicate.
+    Extract a constraint from a non-trivial applied predicate.
 
-    Returns ``(terms, constant, strict, equality)`` where ``terms`` is a
-    tuple of ``(variable, coefficient)`` pairs, with ``>=``/``>``
-    normalized to ``<=``/``<`` by negating the whole expression.
+    ``>=`` and ``>`` are normalized to ``<=`` and ``<`` by negating the
+    expression, so constraints only ever use ``<=``, ``<`` or ``==``.
     """
     # lhs and rhs are only defined on applied binary relations
     apred: Any = prop
@@ -658,13 +651,10 @@ def _preprocess_lra_constraints(
     """
     Convert an EncodedCNF into LRA constraints and unit conflict clauses.
 
-    Returns a mapping from positive literal to ``(terms, constant, strict,
-    equality)`` and a list of one-literal clauses for predicates that are
-    always true or always false. Raises ``UnhandledInput`` for unsupported
-    formulas.
-
-    See the preprocessing section of "A Fast Linear-Arithmetic Solver for DPLL(T)"
-    for an explanation of how the formula is converted into constraints.
+    The returned mapping is keyed by positive literal, while the conflict
+    clauses contain signed literals: one unit clause for each predicate
+    that is trivially true or false. Raises ``ValueError`` and
+    ``UnhandledInput`` for unsupported formulas.
     """
     if testing_mode:
         # sort to reduce nondeterminism
@@ -705,10 +695,12 @@ def _build_lra_solver(
     """
     Build an LRASolver from a mapping of positive SAT literal to constraint.
 
-    The tuple for each literal is ``(terms, constant, strict, equality)``,
-    where ``terms`` is a sequence of (variable, rational coefficient) pairs
-    and ``constant`` is rational. ``strict`` changes <= to <;
-    ``equality`` changes it to ==.
+    Coefficients and constants must be rational. ``strict`` turns the
+    normalized ``<=`` into ``<``; ``equality`` produces both a ``<=`` and
+    a ``>=`` bound.
+
+    See the preprocessing section of "A Fast Linear-Arithmetic Solver for
+    DPLL(T)" for an explanation of the slack variables and the tableau.
     """
     atom_id_to_boundaries = {}
     slack_rows = []  # (terms, slack) pairs, one per distinct multi-term expression
@@ -774,12 +766,8 @@ def _build_tableau(
     rows: list[tuple[_LRATerms, Dummy]], variables: list[Expr]
 ) -> Matrix:
     """
-    Build the tableau rows defining the slack variables.
-
-    ``rows`` is a list of ``(terms, slack)`` pairs, each defining a slack
-    variable as the linear expression over its ``terms``. The returned
-    matrix has one column per variable in ``variables``; row ``r``
-    encodes ``sum(coefficient*variable) - slack = 0``.
+    Build the tableau in which each row encodes
+    ``sum(coefficient*variable) - slack = 0`` for its ``(terms, slack)`` pair.
     """
     A = zeros(len(rows), len(variables))
     col = {v: i for i, v in enumerate(variables)}
