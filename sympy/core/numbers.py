@@ -2847,7 +2847,20 @@ class Zero(IntegerConstant, metaclass=Singleton):
         if expt.is_extended_negative:
             return S.ComplexInfinity
         if expt.is_extended_real is False:
-            return S.NaN
+            # 0**w is the limit of the principal power z**w = exp(w*log(z))
+            # as z -> 0.  Since |z**w| = |z|**re(w)*exp(-im(w)*arg(z)) and
+            # arg(z) is bounded, the limit is 0 if re(w) > 0 and zoo if
+            # re(w) < 0; if re(w) == 0 (e.g. 0**I) z**w keeps circling and
+            # there is no limit.
+            from sympy.functions.elementary.complexes import re
+            r = re(expt)
+            if r.is_extended_positive:
+                return self
+            if r.is_extended_negative:
+                return S.ComplexInfinity
+            if r.is_zero:
+                return S.NaN
+            return None
         if expt.is_zero:
             return S.One
 

@@ -277,6 +277,18 @@ def test_zero():
     assert Float(0)**-2 is zoo
     assert Float(0)**oo is S.Zero
 
+    # non-real exponents: the limit of the principal power, by sign of re
+    # (issue 16478)
+    assert 0**(1 + I) is S.Zero
+    assert 0**(S.Half + 2*I) is S.Zero
+    assert 0**(-1 + I) is zoo
+    assert 0**I is nan
+    assert 0**(-3*I) is nan
+    w = Symbol('w', imaginary=True)
+    assert 0**w is nan
+    v = Symbol('v', extended_real=False)
+    assert (0**v).func is Pow  # sign of re(v) unknown: unevaluated
+
     #Test issue 19572
     assert 0 ** -oo is zoo
     assert power(0, -oo) is zoo
