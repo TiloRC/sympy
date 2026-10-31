@@ -1,0 +1,45 @@
+# Compile the C, C++ and Rust code printed by the tests decorated with
+# @check_printed_code. See sympy/testing/check_printed_code.py.
+
+name: printed code
+
+on:
+  pull_request:
+    paths:
+      - 'sympy/printing/**'
+      - 'sympy/codegen/**'
+      - 'sympy/utilities/codegen.py'
+      - 'sympy/testing/check_printed_code.py'
+      - 'sympy/testing/tests/test_check_printed_code.py'
+      - '.github/workflows/printed-code.yml'
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  compile:
+    name: Printed code compiles
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          python-version: '3.14'
+      - run: pip install mpmath pytest hypothesis==6.170.14
+
+      - name: Show the compilers (preinstalled on the runner)
+        run: gcc --version && g++ --version && rustc --version
+
+      - name: Run the tests that use @check_printed_code
+        env:
+          SYMPY_CHECK_PRINTED_CODE: 1
+        run: |
+          # shellcheck disable=SC2046 # split the file names
+          python -m pytest sympy/testing/tests/test_check_printed_code.py \
+            $(git grep -l '@check_printed_code' -- '*/tests/test_*.py')
